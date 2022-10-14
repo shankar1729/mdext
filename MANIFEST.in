@@ -1,0 +1,2 @@
+include versioneer.py
+include src/mdext/_version.py
