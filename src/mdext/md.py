@@ -1,4 +1,5 @@
 from lammps import lammps, PyLammps, LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR
+import mdext
 from mdext import MPI, potential
 from .histogram import Histogram
 import numpy as np
