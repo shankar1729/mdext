@@ -1,7 +1,6 @@
 from lammps import lammps, PyLammps
 import mdext
 from mdext import MPI, potential
-from .histogram import Histogram
 import numpy as np
 import os
 import time
@@ -57,8 +56,8 @@ class MD:
         potential: potential.Potential,
         units: str = "real",
         timestep: float = 2.0,
-        n_thermo: int = 10,
-        thermo_per_cycle: int = 500,
+        steps_per_thermo: int = 50,
+        thermo_per_cycle: int = 100,
         dr: float = 0.05,
         Tdamp: float = 100.0,
         Pdamp: float = 100.0,
@@ -86,10 +85,10 @@ class MD:
             Supported LAMMPS units system (see `unit_names`).
         timestep
             MD timestep in LAMMPS time units.
-        n_thermo
-            Number of time steps between each thermo and data collection call.
+        steps_per_thermo
+            Number of time steps between each thermo call.
         thermo_per_cycle
-            Number of thermo and data collection calls per reporting cycle.
+            Number of thermo calls per reporting cycle.
             Averaged thermo output is reported at this interval,
             and if requested, densities are updated to file at this interval.
         dr
@@ -104,8 +103,8 @@ class MD:
 
         # Set up LAMMPS instance:
         self.is_head = (MPI.COMM_WORLD.rank == 0)
-        lps = lammps()
         os.environ["OMP_NUM_THREADS"] = "1"  # run single-threaded
+        lps = lammps()
         lmp = PyLammps(ptr=lps)
         self.lmp = lmp
         self.t_start = time.time()
@@ -133,7 +132,7 @@ class MD:
             lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} iso {P} {P} {Pdamp}")
 
         # Setup thermo callback
-        lmp.thermo(n_thermo)
+        lmp.thermo(steps_per_thermo)
         mdext.md.thermo_callback = self
         lmp.python(
             "thermo_callback input 1 SELF return v_thermo_callback format pf here"
@@ -141,12 +140,12 @@ class MD:
         )
         lmp.variable("thermo_callback python thermo_callback")
         lmp.thermo_style("custom step temp press pe vol v_thermo_callback")
-        self.n_thermo = n_thermo
+        self.steps_per_thermo = steps_per_thermo
         self.thermo_per_cycle = thermo_per_cycle
-        self.steps_per_cycle = n_thermo * thermo_per_cycle
+        self.steps_per_cycle = steps_per_thermo * thermo_per_cycle
         log.info(
             f"Time[{self.unit_names['time']}] per step: {timestep}"
-            f"  thermo: {self.thermo_per_cycle * timestep}"
+            f"  thermo: {self.steps_per_thermo * timestep}"
             f"  cycle: {self.steps_per_cycle * timestep}"
         )
         
@@ -161,29 +160,9 @@ class MD:
         self.cycle_stats = np.zeros(4)  # cumulative T, P, PE, vol
 
         # Setup histogramming for density:
-        boxlo, boxhi = lps.extract_box()[:2]
-        L = np.array(boxhi) - np.array(boxlo)
-        geometry = self.potential.geometry
-        dim_sel = {
-            'planar': 2, 'cylindrical': slice(2), 'spherical': slice(None),
-        }[geometry]
-        r_max = 0.5 * L[dim_sel].min()  # in-radius in relevant dimensions
-        self.hist = Histogram(0.0, r_max, dr, n_atom_types)  # each thermo
-        self.cycle_density = np.zeros_like(self.hist.hist)  # results within a cycle
-        self.cum_density = np.zeros_like(self.cycle_density)  # cumulative results
-        self.dr = dr
-        self.r = self.hist.bins
-        # --- bin-dependent weight of histograms:
-        w_intervals = np.zeros(len(self.r) + 1)  # with extra intervals to left & right
-        if geometry == "planar":
-            w_intervals[1:-1] = 2 * (self.r[1:] - self.r[:-1])
-        elif geometry == "cylindrical":
-            w_intervals[1:-1] = np.pi * (self.r[1:] ** 2 - self.r[:-1] ** 2)
-        elif geometry == "spherical":
-            w_intervals[1:-1] = (4 * np.pi / 3) * (self.r[1:] ** 3 - self.r[:-1] ** 3)
-        else:
-            raise KeyError(f"Invalid potential {geometry = }")
-        self.w_bins = dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
+        self.potential.initialize_histogram(lps, dr, n_atom_types)
+        self.cum_density = np.zeros_like(self.potential.hist.hist)  # cumulative results
+        self.r = self.potential.r
 
     @property
     def density(self) -> np.ndarray:
@@ -196,12 +175,12 @@ class MD:
         self.lmp.reset_timestep(0)
         self.i_thermo = -1
         self.i_cycle = 0
-        self.cycle_density.fill(0.)
         self.cum_density.fill(0.)
+        self.potential.reset_stats()
 
     def run(self, n_cycles: int, run_name: str, out_filename: str = "") -> None:
         """
-        Run `n_cycles` cycles of `thermo_per_cycle` x `n_thermo` steps each.
+        Run `n_cycles` cycles of `thermo_per_cycle` x `steps_per_thermo` steps each.
         Use `run_name` to report the start and end of the run (to ease parsing the log).
         If `out_filename` is specified, save density response (HDF5) after every cycle.
         """
@@ -224,46 +203,13 @@ class MD:
             self.i_thermo = 0
             return 0.
         
-        # Get relevant data from LAMMPS:
-        lmp = lammps(ptr=lmp_ptr)
-        types = lmp.numpy.extract_atom("type")
-        pos = lmp.numpy.extract_atom("x")
-        boxlo, boxhi = lmp.extract_box()[:2]
-        L = np.array(boxhi) - np.array(boxlo)
-        
-        # Wrap positions periodically:
-        pos = pos/L  # to fractional coordinates
-        pos -= np.floor(0.5 + pos)  # wrap to [-0.5, 0.5)
-        pos *= L  # back to Cartesian coordinates
-
-        # Collect densities for this step:
-        geometry = self.potential.geometry
-        if geometry == "planar":
-            r = abs(pos[:, 2])  # coordinate being collected
-            w_box = 1.0 / (L[0] * L[1])  # box-size dependent weight
-        elif geometry == "cylindrical":
-            r = np.linalg.norm(pos[:, :2], axis=1)  # coordinate being collected
-            w_box = 1.0 / L[2]  # box-size dependent weight
-        elif geometry == "spherical":
-            r = np.linalg.norm(pos, axis=1)  # coordinate being collected
-            w_box = 1.0  # box-size dependent weight
-        else:
-            raise KeyError(f"Invalid potential {geometry = }")
-            
-        weights = np.zeros((len(types), self.hist.n_w))
-        for i_type in range(self.hist.n_w):
-            weights[(types == i_type + 1), i_type] = w_box
-        self.hist.reset()
-        self.hist.add_events(r, weights)
-        MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, self.hist.hist)
-        
         # Collect results over cycle:
-        self.cycle_density += self.hist.hist * self.w_bins[:, None]
+        lps = lammps(ptr=lmp_ptr)
         self.cycle_stats += np.array((
-            lmp.get_thermo("temp"),
-            lmp.get_thermo("press"),
-            lmp.get_thermo("pe"),
-            L.prod(),
+            lps.get_thermo("temp"),
+            lps.get_thermo("press"),
+            lps.get_thermo("pe"),
+            lps.get_thermo("vol"),
         ))
         self.i_thermo += 1
 
@@ -272,14 +218,14 @@ class MD:
             cycle_norm = 1. / self.thermo_per_cycle
             T, P, PE, vol = self.cycle_stats * cycle_norm
             t_cpu = time.time() - self.t_start
-            self.cum_density += self.cycle_density * cycle_norm
+            self.cum_density += self.potential.density
             self.i_cycle += 1
             log.info(
                 f"{self.i_cycle:^5d} {T:7.3f} {P:7.1f} {PE:^12.3f} "
                 f"{vol:^8.1f} {t_cpu:7.1f}"
             )
             # Reset within-cycle quantities:
-            self.cycle_density.fill(0.)
+            self.potential.reset_stats()
             self.cycle_stats.fill(0.)
             self.i_thermo = -1
         

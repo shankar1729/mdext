@@ -15,7 +15,7 @@ with h5py.File("test.h5", "r") as fp:
     n = np.array(fp["n"])
     V = np.array(fp["V"])
 
-fig, axes = plt.subplots(2, 1, sharex=True)
+fig, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 8))
 axes[0].plot(r, n)
 if n_bulk is not None:
     axes[0].axhline(n_bulk, color='k', ls='dotted')

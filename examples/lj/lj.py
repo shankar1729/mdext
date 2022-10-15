@@ -22,9 +22,9 @@ def main() -> None:
         seed=seed,
         potential=mdext.potential.PlanarGaussian(U0, sigma)
     )
-    md.run(10, "equilibration")
+    md.run(2, "equilibration")
     md.reset_stats()
-    md.run(20, "collection", "test.h5")
+    md.run(5, "collection", "test.h5")
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
