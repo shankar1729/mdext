@@ -13,6 +13,8 @@ log: logging.Logger = logging.getLogger("mdext")  #: Log for the mdext module
 log.setLevel(logging.WARNING if MPI.COMM_WORLD.rank else logging.INFO)
 log.addHandler(logging.StreamHandler(sys.stderr))  # because PyLAMMPS captures stdout
 
+thermo_callback = None  #: imported into __main__ by lammps python command
+
     
 class MD:
     
@@ -66,9 +68,15 @@ class MD:
         lmp.velocity(f"all create {T} {seed} dist gaussian loop local")
         #lmp.fix(f"Ensemble all nvt temp {T} {T} 100")  # Td = 100 fs
         lmp.fix(f"Ensemble all npt temp {T} {T} 100 iso 1 1 100")  # Td = 100 fs
-        
+        # --- thermo callback
+        mdext.md.thermo_callback = self
+        lmp.python(
+            "thermo_callback input 1 SELF return v_thermo_callback format pf here"
+            " 'from mdext.md import thermo_callback'"
+        )
+        lmp.variable("thermo_callback python thermo_callback")
+        lmp.thermo_style("custom step temp press pe vol v_thermo_callback")
         # --- external fix
-        global extpot
         extpot = potential.Planar(U0, sigma)
         lmp.fix("ext all external pf/callback 1 1")
         lps.set_fix_external_callback("ext", extpot, lps)
@@ -99,12 +107,6 @@ class MD:
         self.i_cycle = 0
         self.cycle_density.fill(0.)
         self.density.fill(0.)
-
-    def setup_thermo_callback(self) -> None:
-        """Setup data collection at every thermo step."""
-        self.lmp.python("md input 1 SELF return v_thermo_callback format pf exists")
-        self.lmp.variable("thermo_callback python md")
-        self.lmp.thermo_style("custom step temp press pe vol v_thermo_callback")
 
     def run(self, n_cycles: int, run_name: str, density_file: str = "") -> None:
         """Run `n_cycles` cycles of `steps_per_cycle` each.
