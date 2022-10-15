@@ -5,8 +5,9 @@ from abc import ABC, abstractmethod
 
 class Potential(ABC):
     """Base class for all external potentials."""
-    def __init__(self):
-        pass
+    def __init__(self, geometry: str):
+        assert geometry in {'planar', 'cylindrical', 'spherical'}
+        self.geometry = geometry
     
     @abstractmethod
     def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
@@ -52,7 +53,7 @@ class PlanarGaussian(Potential):
     
     def __init__(self, U0: float, sigma: float) -> None:
         """Set up planar Gaussian potential with peak `U0` and width `sigma`."""
-        super().__init__()
+        super().__init__("planar")
         self.U0 = U0
         self.sigma = sigma
         self.inv_sigma_sq = 1./(sigma**2)
@@ -61,4 +62,37 @@ class PlanarGaussian(Potential):
         z = pos[:, 2]
         E = self.U0 * np.exp(-0.5 * self.inv_sigma_sq * z * z)
         f[:, 2] = E * self.inv_sigma_sq * z
+        return E
+
+
+class CylindricalGaussian(Potential):
+    
+    def __init__(self, U0: float, sigma: float) -> None:
+        """Set up cylindrical Gaussian potential with peak `U0` and width `sigma`."""
+        super().__init__("cylindrical")
+        self.U0 = U0
+        self.sigma = sigma
+        self.inv_sigma_sq = 1./(sigma**2)
+
+    def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
+        xy = pos[:, :2]
+        rho_sq = (xy ** 2).sum(axis=1)
+        E = self.U0 * np.exp(-0.5 * self.inv_sigma_sq * rho_sq)
+        f[:, :2] = (E * self.inv_sigma_sq)[:, None] * xy
+        return E
+
+
+class SphericalGaussian(Potential):
+    
+    def __init__(self, U0: float, sigma: float) -> None:
+        """Set up spherical Gaussian potential with peak `U0` and width `sigma`."""
+        super().__init__("spherical")
+        self.U0 = U0
+        self.sigma = sigma
+        self.inv_sigma_sq = 1./(sigma**2)
+
+    def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
+        r_sq = (pos ** 2).sum(axis=1)
+        E = self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r_sq)
+        f[:] = (E * self.inv_sigma_sq)[:, None] * pos
         return E

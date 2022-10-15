@@ -24,7 +24,7 @@ def main() -> None:
         T=T,
         P=P,
         seed=seed,
-        potential=mdext.potential.PlanarGaussian(U0, sigma)
+        potential=mdext.potential.SphericalGaussian(U0, sigma)
     )
     md.run(2, "equilibration")
     md.reset_stats()
@@ -32,12 +32,12 @@ def main() -> None:
     
     # Plot density response:
     if md.is_head:
-        plt.plot(md.z, md.density / md.i_cycle)
+        plt.plot(md.r, md.density / md.i_cycle)
         plt.axhline(n_bulk_water, color='k', ls='dotted')
         plt.show()
 
 
-def setup(lmp: PyLammps, seed: int) -> None:
+def setup(lmp: PyLammps, seed: int) -> int:
     """Setup initial atomic configuration and interaction potential."""
     
     # Construct simulation box:
@@ -59,7 +59,9 @@ def setup(lmp: PyLammps, seed: int) -> None:
     # Initial minimize:
     log.info("Minimizing initial structure")
     lmp.minimize("1E-4 1E-6 10000 100000")
-
     
+    return 1  # number of atom types in this simulation
+
+
 if __name__ == "__main__":
     main()

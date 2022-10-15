@@ -49,7 +49,7 @@ class MD:
     def __init__(
         self,
         *,
-        setup: Callable[[PyLammps, int], None],
+        setup: Callable[[PyLammps, int], int],
         T: float,
         P: Optional[float],
         seed: int,
@@ -67,7 +67,8 @@ class MD:
         ----------
         setup
             Callable with signature `setup(lmp, seed)` that creates initial atomic
-            configuration and sets up the interaction potential / force fields.
+            configuration and sets up the interaction potential / force fields,
+            and returns the number of distinct atom types in the simulation.
             This could load a LAMMPS data file, or use LAMMPS box and random atom
             creation commands. If starting with a random configuration, this should
             also ideally invoke minimize to ensure a reasonable starting point.
@@ -117,7 +118,7 @@ class MD:
         lmp.boundary("p p p")
         
         # Set up initial atomic configuration and interaction potential:
-        setup(lmp, seed)
+        n_atom_types = setup(lmp, seed)
 
         # Prepare for dynamics:
         lmp.reset_timestep(0)
@@ -157,13 +158,32 @@ class MD:
         self.i_thermo = -1  # index of current thermo entry within cycle
         self.i_cycle = 0  # index of current cycle
         self.cycle_stats = np.zeros(4)  # cumulative T, P, PE, vol
-        # --- setup histograms:
-        self.dr = dr
+
+        # Setup histogramming for density:
         boxlo, boxhi = lps.extract_box()[:2]
-        self.hist = Histogram(boxlo[2], boxhi[2], self.dr, 1)  # used in each thermo
-        self.z = self.hist.bins
-        self.cycle_density = np.zeros((len(self.z), self.hist.n_w))  # results within a cycle
+        L = np.array(boxhi) - np.array(boxlo)
+        geometry = self.potential.geometry
+        dim_sel = {
+            'planar': 2, 'cylindrical': slice(2), 'spherical': slice(None),
+        }[geometry]
+        r_max = 0.5 * L[dim_sel].min()  # in-radius in relevant dimensions
+        self.hist = Histogram(0.0, r_max, dr, n_atom_types)  # each thermo
+        self.cycle_density = np.zeros_like(self.hist.hist)  # results within a cycle
         self.density = np.zeros_like(self.cycle_density)  # cumulative results
+        self.dr = dr
+        self.r = self.hist.bins
+        # --- bin-dependent weight of histograms:
+        w_intervals = np.zeros(len(self.r) + 1)  # with extra intervals to left & right
+        if geometry == "planar":
+            w_intervals[1:-1] = 2 * (self.r[1:] - self.r[:-1])
+        elif geometry == "cylindrical":
+            w_intervals[1:-1] = np.pi * (self.r[1:] ** 2 - self.r[:-1] ** 2)
+        elif geometry == "spherical":
+            w_intervals[1:-1] = (4 * np.pi / 3) * (self.r[1:] ** 3 - self.r[:-1] ** 3)
+        else:
+            raise KeyError(f"Invalid potential {geometry = }")
+        self.w_bins = dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
+
 
     def reset_stats(self) -> None:
         """Reset counts / histograms."""
@@ -211,16 +231,28 @@ class MD:
         pos *= L  # back to Cartesian coordinates
 
         # Collect densities for this step:
-        invA = 1./(L[0] * L[1])
+        geometry = self.potential.geometry
+        if geometry == "planar":
+            r = abs(pos[:, 2])  # coordinate being collected
+            w_box = 1.0 / (L[0] * L[1])  # box-size dependent weight
+        elif geometry == "cylindrical":
+            r = np.linalg.norm(pos[:, :2], axis=1)  # coordinate being collected
+            w_box = 1.0 / L[2]  # box-size dependent weight
+        elif geometry == "spherical":
+            r = np.linalg.norm(pos, axis=1)  # coordinate being collected
+            w_box = 1.0  # box-size dependent weight
+        else:
+            raise KeyError(f"Invalid potential {geometry = }")
+            
         weights = np.zeros((len(types), self.hist.n_w))
         for i_type in range(self.hist.n_w):
-            weights[(types == i_type + 1), i_type] = invA
+            weights[(types == i_type + 1), i_type] = w_box
         self.hist.reset()
-        self.hist.add_events(pos[:, 2], weights)
+        self.hist.add_events(r, weights)
         MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, self.hist.hist)
         
         # Collect results over cycle:
-        self.cycle_density += self.hist.hist
+        self.cycle_density += self.hist.hist * self.w_bins[:, None]
         self.cycle_stats += np.array((
             lmp.get_thermo("temp"),
             lmp.get_thermo("press"),
