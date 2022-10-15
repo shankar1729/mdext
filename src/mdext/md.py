@@ -1,6 +1,8 @@
 from lammps import lammps, PyLammps
 import mdext
-from mdext import MPI, potential
+from mdext import MPI
+from .geometry import GeometryType
+from .potential import Potential, ForceCallback
 import numpy as np
 import os
 import time
@@ -53,7 +55,8 @@ class MD:
         T: float,
         P: Optional[float],
         seed: int,
-        potential: potential.Potential,
+        potential: Potential,
+        geometry_type: GeometryType,
         units: str = "real",
         timestep: float = 2.0,
         steps_per_thermo: int = 50,
@@ -80,7 +83,13 @@ class MD:
         seed
             Random seed for velocity generation and passed to `setup`.
         potential
-            External potential calculator derived from `mdext.potential.Potential`.
+            Function or callable calculating potential and derivative.
+            This function should return E and dE/d(r_sq) given r_sq,
+            the square of the 1D coordinate specified by `geometry_type`.
+        geometry_type
+            One of the geometry classes from `mdext.geometry` which specifies
+            which reduced 1D coordinate to apply potentials and collect densities
+            as a function of.
         units
             Supported LAMMPS units system (see `unit_names`).
         timestep
@@ -149,20 +158,24 @@ class MD:
             f"  cycle: {self.steps_per_cycle * timestep}"
         )
         
-        # Set up external force callback
-        self.potential = potential
+        # Set up external force callback and density collection:
+        self.force_callback = ForceCallback(
+            potential=potential,
+            geometry_type=geometry_type,
+            lps=lps,
+            dr=dr,
+            n_atom_types=n_atom_types,
+        )
         lmp.fix("ext all external pf/callback 1 1")
-        lps.set_fix_external_callback("ext", self.potential, lps)
+        lps.set_fix_external_callback("ext", self.force_callback, lps)
+        self.cum_density = np.zeros_like(self.force_callback.hist.hist)  # cumulative
+        self.r = self.force_callback.r
         
-        # Prepare for data collection:
+        # Prepare for thermo data collection:
         self.i_thermo = -1  # index of current thermo entry within cycle
         self.i_cycle = 0  # index of current cycle
         self.cycle_stats = np.zeros(4)  # cumulative T, P, PE, vol
 
-        # Setup histogramming for density:
-        self.potential.initialize_histogram(lps, dr, n_atom_types)
-        self.cum_density = np.zeros_like(self.potential.hist.hist)  # cumulative results
-        self.r = self.potential.r
 
     @property
     def density(self) -> np.ndarray:
@@ -176,7 +189,7 @@ class MD:
         self.i_thermo = -1
         self.i_cycle = 0
         self.cum_density.fill(0.)
-        self.potential.reset_stats()
+        self.force_callback.reset_stats()
 
     def run(self, n_cycles: int, run_name: str, out_filename: str = "") -> None:
         """
@@ -218,14 +231,14 @@ class MD:
             cycle_norm = 1. / self.thermo_per_cycle
             T, P, PE, vol = self.cycle_stats * cycle_norm
             t_cpu = time.time() - self.t_start
-            self.cum_density += self.potential.density
+            self.cum_density += self.force_callback.density
             self.i_cycle += 1
             log.info(
                 f"{self.i_cycle:^5d} {T:7.3f} {P:7.1f} {PE:^12.3f} "
                 f"{vol:^8.1f} {t_cpu:7.1f}"
             )
             # Reset within-cycle quantities:
-            self.potential.reset_stats()
+            self.force_callback.reset_stats()
             self.cycle_stats.fill(0.)
             self.i_thermo = -1
         
@@ -237,8 +250,8 @@ class MD:
             with h5py.File(filename, "w") as fp:
                 fp["r"] = self.r
                 fp["n"] = self.density
-                fp["V"] = self.potential.get_potential(self.r)
+                fp["V"] = self.force_callback.potential(self.r ** 2)[0]
                 fp.attrs["T"] = self.T
                 if self.P is not None:
                     fp.attrs["P"] = self.P
-                fp.attrs["geometry"] = self.potential.geometry
+                fp.attrs["geometry"] = self.force_callback.geometry_type.__name__

@@ -1,68 +1,80 @@
+from lammps import lammps
 import numpy as np
 from mdext import MPI
-from abc import ABC, abstractmethod
+from .geometry import GeometryType
 from .histogram import Histogram
+from typing import Callable, Tuple
 
 
-class Potential(ABC):
-    """Base class for all external potentials."""
-    def __init__(self, geometry: str):
-        assert geometry in {'planar', 'cylindrical', 'spherical'}
-        self.geometry = geometry
+Potential = Callable[[np.ndarray], Tuple[np.ndarray, np.ndarray]]
+"""Return potential and its derivative, given square of 1D coordinate as input.
+Note that the derivative is also with respect to the squared-coordinate."""
+
+
+class Gaussian:
+    def __init__(self, U0: float, sigma: float) -> None:
+        """Gaussian potential with peak `U0` and width `sigma`."""
+        self.U0 = U0
+        self.sigma = sigma
+        self.mhalf_inv_sigma_sq = -0.5 / (sigma ** 2)
+
+    def __call__(self, r_sq: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        E = self.U0 * np.exp(self.mhalf_inv_sigma_sq * r_sq)
+        r_sq_grad = self.mhalf_inv_sigma_sq * E
+        return E, r_sq_grad
+
+
+class ForceCallback:
+    """Force callback object to apply external forces and collect densities."""
+
+    def __init__(
+        self,
+        *,
+        potential: Potential,
+        geometry_type: GeometryType,
+        lps: lammps,
+        dr: float,
+        n_atom_types: int,
+    ):
+        self.potential = potential
+        self.geometry_type = geometry_type
     
-    def initialize_histogram(self, lps, dr: float, n_atom_types: int) -> None:
-        """Initialize density collection with same 1D geometry as applied potential."""
+        # Initialize density collection with same 1D geometry as applied potential
         boxlo, boxhi = lps.extract_box()[:2]
         L = np.array(boxhi) - np.array(boxlo)
-        dim_sel = {
-            'planar': 2, 'cylindrical': slice(2), 'spherical': slice(None),
-        }[self.geometry]
-        r_max = 0.5 * L[dim_sel].min()  # in-radius in relevant dimensions
-        self.hist = Histogram(0.0, r_max, dr, n_atom_types)  # each thermo
+        self.hist = Histogram(0.0, geometry_type.r_max(L), dr, n_atom_types)
         self.dr = dr
         self.r = self.hist.bins
-        # --- bin-dependent weight of histograms:
+
+        # Calculate bin-dependent weight of histograms (eg. 2 pi r for cylindrical):
+        volumes = geometry_type.volume(self.r)
         w_intervals = np.zeros(len(self.r) + 1)  # with extra intervals to left & right
-        if self.geometry == "planar":
-            w_intervals[1:-1] = 2 * (self.r[1:] - self.r[:-1])
-        elif self.geometry == "cylindrical":
-            w_intervals[1:-1] = np.pi * (self.r[1:] ** 2 - self.r[:-1] ** 2)
-        elif self.geometry == "spherical":
-            w_intervals[1:-1] = (4 * np.pi / 3) * (self.r[1:] ** 3 - self.r[:-1] ** 3)
-        else:
-            raise KeyError(f"Invalid potential {self.geometry = }")
+        w_intervals[1 : -1] = volumes[1:] - volumes[:-1]
         self.w_bins = dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
         self.n_steps = 0
 
-    def reset_stats(self):
+    def reset_stats(self) -> None:
         self.hist.reset()
         self.n_steps = 0
 
     @property
-    def density(self):
+    def density(self) -> np.ndarray:
         """Densities collected with same 1D geometry as applied potential."""
         result = self.hist.hist * self.w_bins[:, None] / self.n_steps
         MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, result)
         return result
         
-    @abstractmethod
-    def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
-        """
-        Calculate external forces in `f` and return corresponding per-atom energies,
-        given the positions `pos` (wrapped to unit cell centered at zero).
-        """
-
-    @abstractmethod
-    def get_potential(self, r: np.ndarray) -> np.ndarray:
-        """
-        Return potential as a function of position `r`.
-        This is used to store the applied potential with the measured density response.
-        """
-        
-    def __call__(self, lps, ntimestep, nlocal, tag, x, f) -> None:
+    def __call__(
+        self,
+        lps: lammps,
+        ntimestep: int,
+        nlocal: int,
+        tag: np.ndarray,
+        x: np.ndarray,
+        f: np.ndarray
+    ) -> None:
         """
         Callback function to add force, energy and virials for external potential.
-        Handles total energy and virial calculation using forces from `self.compute`.
         """
         boxlo, boxhi = lps.extract_box()[:2]
         L = np.array(boxhi) - np.array(boxlo)
@@ -74,7 +86,9 @@ class Potential(ABC):
         
         # Get energies and forces (from derived class):
         f.fill(0.)
-        E = self.compute(pos, f)
+        r_sq = self.geometry_type.r_sq(pos)
+        E, r_sq_grad = self.potential(r_sq)
+        self.geometry_type.set_force(pos, r_sq_grad, f)
         
         # Compute total energy and virial:
         Etot = MPI.COMM_WORLD.allreduce(E.sum())
@@ -92,77 +106,10 @@ class Potential(ABC):
         lps.fix_external_set_virial_global("ext", vtot)
 
         # Collect densities for this step:
-        if self.geometry == "planar":
-            r = abs(pos[:, 2])  # coordinate being collected
-            w_box = 1.0 / (L[0] * L[1])  # box-size dependent weight
-        elif self.geometry == "cylindrical":
-            r = np.linalg.norm(pos[:, :2], axis=1)  # coordinate being collected
-            w_box = 1.0 / L[2]  # box-size dependent weight
-        elif self.geometry == "spherical":
-            r = np.linalg.norm(pos, axis=1)  # coordinate being collected
-            w_box = 1.0  # box-size dependent weight
-        else:
-            raise KeyError(f"Invalid potential {geometry = }")
-        
+        inv_perpendicular_volume = 1.0 / self.geometry_type.perpendicular_volume(L)
         weights = np.zeros((nlocal, self.hist.n_w))
         types = lps.numpy.extract_atom("type")
         for i_type in range(self.hist.n_w):
-            weights[(types == i_type + 1), i_type] = w_box
-        self.hist.add_events(r, weights)
+            weights[(types == i_type + 1), i_type] = inv_perpendicular_volume
+        self.hist.add_events(np.sqrt(r_sq), weights)
         self.n_steps += 1
-
-
-class PlanarGaussian(Potential):
-    
-    def __init__(self, U0: float, sigma: float) -> None:
-        """Set up planar Gaussian potential with peak `U0` and width `sigma`."""
-        super().__init__("planar")
-        self.U0 = U0
-        self.sigma = sigma
-        self.inv_sigma_sq = 1./(sigma**2)
-
-    def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
-        z = pos[:, 2]
-        E = self.get_potential(z)
-        f[:, 2] = E * self.inv_sigma_sq * z
-        return E
-    
-    def get_potential(self, r: np.ndarray) -> np.ndarray:
-        return self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r * r)
-
-
-class CylindricalGaussian(Potential):
-    
-    def __init__(self, U0: float, sigma: float) -> None:
-        """Set up cylindrical Gaussian potential with peak `U0` and width `sigma`."""
-        super().__init__("cylindrical")
-        self.U0 = U0
-        self.sigma = sigma
-        self.inv_sigma_sq = 1./(sigma**2)
-
-    def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
-        xy = pos[:, :2]
-        E = self.get_potential(np.linalg.norm(xy, axis=1))
-        f[:, :2] = (E * self.inv_sigma_sq)[:, None] * xy
-        return E
-
-    def get_potential(self, r: np.ndarray) -> np.ndarray:
-        return self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r * r)
-
-
-class SphericalGaussian(Potential):
-    
-    def __init__(self, U0: float, sigma: float) -> None:
-        """Set up spherical Gaussian potential with peak `U0` and width `sigma`."""
-        super().__init__("spherical")
-        self.U0 = U0
-        self.sigma = sigma
-        self.inv_sigma_sq = 1./(sigma**2)
-
-    def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
-        E = self.get_potential(np.linalg.norm(pos, axis=1))
-        f[:] = (E * self.inv_sigma_sq)[:, None] * pos
-        return E
-
-    def get_potential(self, r: np.ndarray) -> np.ndarray:
-        return self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r * r)

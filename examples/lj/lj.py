@@ -20,7 +20,8 @@ def main() -> None:
         T=T,
         P=P,
         seed=seed,
-        potential=mdext.potential.PlanarGaussian(U0, sigma)
+        potential=mdext.potential.Gaussian(U0, sigma),
+        geometry_type=mdext.geometry.Spherical,
     )
     md.run(2, "equilibration")
     md.reset_stats()
