@@ -131,4 +131,5 @@ dmypy.json
 # LAMMPS and simulation outputs
 log.lammps
 *.h5
+*.out
 

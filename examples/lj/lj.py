@@ -5,9 +5,6 @@ from lammps import PyLammps
 from mdext import log
 
 
-n_bulk_water = 0.03334  # bulk density of water at STP (in A^-3)
-
-
 def main() -> None:
 
     # Current simulation parameters:
@@ -25,26 +22,9 @@ def main() -> None:
         seed=seed,
         potential=mdext.potential.PlanarGaussian(U0, sigma)
     )
-    md.run(2, "equilibration")
+    md.run(10, "equilibration")
     md.reset_stats()
-    md.run(2, "collection", "test.h5")
-    
-    # Plot density response:
-    if md.is_head:
-        import matplotlib.pyplot as plt
-        import h5py
-        with h5py.File("test.h5", "r") as fp:
-            r = np.array(fp["r"])
-            n = np.array(fp["n"])
-            V = np.array(fp["V"])
-        fig, axes = plt.subplots(2, 1, sharex=True)
-        axes[0].plot(r, n)
-        axes[0].axhline(n_bulk_water, color='k', ls='dotted')
-        axes[0].set_ylabel("Density")
-        axes[1].plot(r, V)
-        axes[1].set_ylabel("Potential")
-        axes[1].set_xlabel("r")
-        plt.show()
+    md.run(20, "collection", "test.h5")
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
@@ -57,7 +37,8 @@ def setup(lmp: PyLammps, seed: int) -> int:
         " units box"
     )
     lmp.create_box("1 sim_box")
-    n_atoms = int(np.round(n_bulk_water * L.prod()))
+    n_bulk = 0.03334  # bulk density of water at STP (in A^-3)
+    n_atoms = int(np.round(n_bulk * L.prod()))
     lmp.create_atoms(f"1 random {n_atoms} {seed} sim_box")
     lmp.mass("1 18.")  # pretending this is a united-atom model of water
 
