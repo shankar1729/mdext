@@ -35,9 +35,12 @@ class ForceCallback:
         lps: lammps,
         dr: float,
         n_atom_types: int,
+        potential_type: int,
     ):
         self.potential = potential
         self.geometry_type = geometry_type
+        self.potential_type = potential_type
+        assert 1 <= potential_type <= n_atom_types
     
         # Initialize density collection with same 1D geometry as applied potential
         boxlo, boxhi = lps.extract_box()[:2]
@@ -63,7 +66,13 @@ class ForceCallback:
         result = self.hist.hist * self.w_bins[:, None] / self.n_steps
         MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, result)
         return result
-        
+    
+    def get_potential(self) -> np.ndarray:
+        """Get the potential on the histogram grid."""
+        V = np.zeros_like(self.hist.hist)
+        V[:, self.potential_type - 1]  = self.potential(self.r ** 2)[0]
+        return V
+
     def __call__(
         self,
         lps: lammps,
@@ -84,10 +93,16 @@ class ForceCallback:
         pos -= np.floor(0.5 + pos)  # wrap to [-0.5, 0.5)
         pos *= L  # back to Cartesian coordinates
         
+        # Identify atoms to apply external potential / force to:
+        types = lps.numpy.extract_atom("type")
+        mask = np.where(types == self.potential_type, 1.0, 0.0)
+
         # Get energies and forces (from derived class):
         f.fill(0.)
         r_sq = self.geometry_type.r_sq(pos)
         E, r_sq_grad = self.potential(r_sq)
+        E *= mask
+        r_sq_grad *= mask
         self.geometry_type.set_force(pos, r_sq_grad, f)
         
         # Compute total energy and virial:
@@ -108,7 +123,6 @@ class ForceCallback:
         # Collect densities for this step:
         inv_perpendicular_volume = 1.0 / self.geometry_type.perpendicular_volume(L)
         weights = np.zeros((nlocal, self.hist.n_w))
-        types = lps.numpy.extract_atom("type")
         for i_type in range(self.hist.n_w):
             weights[(types == i_type + 1), i_type] = inv_perpendicular_volume
         self.hist.add_events(np.sqrt(r_sq), weights)

@@ -22,6 +22,8 @@ def main() -> None:
         seed=seed,
         potential=mdext.potential.Gaussian(U0, sigma),
         geometry_type=mdext.geometry.Spherical,
+        n_atom_types=1,
+        potential_type=1,
     )
     md.run(2, "equilibration")
     md.reset_stats()
@@ -51,8 +53,6 @@ def setup(lmp: PyLammps, seed: int) -> int:
     # Initial minimize:
     log.info("Minimizing initial structure")
     lmp.minimize("1E-4 1E-6 10000 100000")
-    
-    return 1  # number of atom types in this simulation
 
 
 if __name__ == "__main__":

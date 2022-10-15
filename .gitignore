@@ -132,4 +132,5 @@ dmypy.json
 log.lammps
 *.h5
 *.out
+liquid.data
 

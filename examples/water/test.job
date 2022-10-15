@@ -1,0 +1,4 @@
+#!/bin/bash
+#SBATCH -p cpu -N 1 -n 16 -c 1 --hint=nomultithread -o test.out -t 15
+
+mpirun python spce.py

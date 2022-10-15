@@ -51,12 +51,14 @@ class MD:
     def __init__(
         self,
         *,
-        setup: Callable[[PyLammps, int], int],
+        setup: Callable[[PyLammps, int], None],
         T: float,
         P: Optional[float],
         seed: int,
         potential: Potential,
         geometry_type: GeometryType,
+        n_atom_types: int,
+        potential_type: int,
         units: str = "real",
         timestep: float = 2.0,
         steps_per_thermo: int = 50,
@@ -70,8 +72,7 @@ class MD:
         ----------
         setup
             Callable with signature `setup(lmp, seed)` that creates initial atomic
-            configuration and sets up the interaction potential / force fields,
-            and returns the number of distinct atom types in the simulation.
+            configuration and sets up the interaction potential / force fields.
             This could load a LAMMPS data file, or use LAMMPS box and random atom
             creation commands. If starting with a random configuration, this should
             also ideally invoke minimize to ensure a reasonable starting point.
@@ -90,6 +91,10 @@ class MD:
             One of the geometry classes from `mdext.geometry` which specifies
             which reduced 1D coordinate to apply potentials and collect densities
             as a function of.
+        n_atom_types
+            Number of atom types in the LAMMPS simulation.
+        potential_type
+            1-based LAMMPS atom type that the external potential should be applied to.
         units
             Supported LAMMPS units system (see `unit_names`).
         timestep
@@ -127,7 +132,7 @@ class MD:
         lmp.boundary("p p p")
         
         # Set up initial atomic configuration and interaction potential:
-        n_atom_types = setup(lmp, seed)
+        setup(lmp, seed)
 
         # Prepare for dynamics:
         lmp.reset_timestep(0)
@@ -165,11 +170,11 @@ class MD:
             lps=lps,
             dr=dr,
             n_atom_types=n_atom_types,
+            potential_type=potential_type,
         )
         lmp.fix("ext all external pf/callback 1 1")
         lps.set_fix_external_callback("ext", self.force_callback, lps)
         self.cum_density = np.zeros_like(self.force_callback.hist.hist)  # cumulative
-        self.r = self.force_callback.r
         
         # Prepare for thermo data collection:
         self.i_thermo = -1  # index of current thermo entry within cycle
@@ -248,9 +253,9 @@ class MD:
         """Save averaged densities and potentials to file."""
         if self.is_head:
             with h5py.File(filename, "w") as fp:
-                fp["r"] = self.r
+                fp["r"] = self.force_callback.r
                 fp["n"] = self.density
-                fp["V"] = self.force_callback.potential(self.r ** 2)[0]
+                fp["V"] = self.force_callback.get_potential()
                 fp.attrs["T"] = self.T
                 if self.P is not None:
                     fp.attrs["P"] = self.P
