@@ -1,7 +1,6 @@
 """Single-site LJ fluid test with roughly the density of water at STP."""
 import mdext
 import numpy as np
-import matplotlib.pyplot as plt
 from lammps import PyLammps
 from mdext import log
 
@@ -24,16 +23,27 @@ def main() -> None:
         T=T,
         P=P,
         seed=seed,
-        potential=mdext.potential.SphericalGaussian(U0, sigma)
+        potential=mdext.potential.PlanarGaussian(U0, sigma)
     )
     md.run(2, "equilibration")
     md.reset_stats()
-    md.run(5, "collection")
+    md.run(2, "collection", "test.h5")
     
     # Plot density response:
     if md.is_head:
-        plt.plot(md.r, md.density / md.i_cycle)
-        plt.axhline(n_bulk_water, color='k', ls='dotted')
+        import matplotlib.pyplot as plt
+        import h5py
+        with h5py.File("test.h5", "r") as fp:
+            r = np.array(fp["r"])
+            n = np.array(fp["n"])
+            V = np.array(fp["V"])
+        fig, axes = plt.subplots(2, 1, sharex=True)
+        axes[0].plot(r, n)
+        axes[0].axhline(n_bulk_water, color='k', ls='dotted')
+        axes[0].set_ylabel("Density")
+        axes[1].plot(r, V)
+        axes[1].set_ylabel("Potential")
+        axes[1].set_xlabel("r")
         plt.show()
 
 

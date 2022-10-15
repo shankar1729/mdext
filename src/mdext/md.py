@@ -7,6 +7,7 @@ import os
 import time
 import logging
 import sys
+import h5py
 from typing import Callable, Optional
 
 
@@ -169,7 +170,7 @@ class MD:
         r_max = 0.5 * L[dim_sel].min()  # in-radius in relevant dimensions
         self.hist = Histogram(0.0, r_max, dr, n_atom_types)  # each thermo
         self.cycle_density = np.zeros_like(self.hist.hist)  # results within a cycle
-        self.density = np.zeros_like(self.cycle_density)  # cumulative results
+        self.cum_density = np.zeros_like(self.cycle_density)  # cumulative results
         self.dr = dr
         self.r = self.hist.bins
         # --- bin-dependent weight of histograms:
@@ -184,6 +185,11 @@ class MD:
             raise KeyError(f"Invalid potential {geometry = }")
         self.w_bins = dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
 
+    @property
+    def density(self) -> np.ndarray:
+        """Density profiles, averaged over all completed cycles."""
+        assert(self.i_cycle)  # Need at least one cycle before getting density
+        return self.cum_density * (1.0 / self.i_cycle)
 
     def reset_stats(self) -> None:
         """Reset counts / histograms."""
@@ -191,7 +197,7 @@ class MD:
         self.i_thermo = -1
         self.i_cycle = 0
         self.cycle_density.fill(0.)
-        self.density.fill(0.)
+        self.cum_density.fill(0.)
 
     def run(self, n_cycles: int, run_name: str, out_filename: str = "") -> None:
         """
@@ -266,7 +272,7 @@ class MD:
             cycle_norm = 1. / self.thermo_per_cycle
             T, P, PE, vol = self.cycle_stats * cycle_norm
             t_cpu = time.time() - self.t_start
-            self.density += self.cycle_density * cycle_norm
+            self.cum_density += self.cycle_density * cycle_norm
             self.i_cycle += 1
             log.info(
                 f"{self.i_cycle:^5d} {T:7.3f} {P:7.1f} {PE:^12.3f} "
@@ -278,3 +284,15 @@ class MD:
             self.i_thermo = -1
         
         return 0.
+
+    def save_response(self, filename: str) -> None:
+        """Save averaged densities and potentials to file."""
+        if self.is_head:
+            with h5py.File(filename, "w") as fp:
+                fp["r"] = self.r
+                fp["n"] = self.density
+                fp["V"] = self.potential.get_potential(self.r)
+                fp.attrs["T"] = self.T
+                if self.P is not None:
+                    fp.attrs["P"] = self.P
+                fp.attrs["geometry"] = self.potential.geometry

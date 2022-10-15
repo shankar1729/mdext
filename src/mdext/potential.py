@@ -15,6 +15,13 @@ class Potential(ABC):
         Calculate external forces in `f` and return corresponding per-atom energies,
         given the positions `pos` (wrapped to unit cell centered at zero).
         """
+
+    @abstractmethod
+    def get_potential(self, r: np.ndarray) -> np.ndarray:
+        """
+        Return potential as a function of position `r`.
+        This is used to store the applied potential with the measured density response.
+        """
         
     def __call__(self, lps, ntimestep, nlocal, tag, x, f) -> None:
         """
@@ -60,9 +67,12 @@ class PlanarGaussian(Potential):
 
     def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
         z = pos[:, 2]
-        E = self.U0 * np.exp(-0.5 * self.inv_sigma_sq * z * z)
+        E = self.get_potential(z)
         f[:, 2] = E * self.inv_sigma_sq * z
         return E
+    
+    def get_potential(self, r: np.ndarray) -> np.ndarray:
+        return self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r * r)
 
 
 class CylindricalGaussian(Potential):
@@ -76,10 +86,12 @@ class CylindricalGaussian(Potential):
 
     def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
         xy = pos[:, :2]
-        rho_sq = (xy ** 2).sum(axis=1)
-        E = self.U0 * np.exp(-0.5 * self.inv_sigma_sq * rho_sq)
+        E = self.get_potential(np.linalg.norm(xy, axis=1))
         f[:, :2] = (E * self.inv_sigma_sq)[:, None] * xy
         return E
+
+    def get_potential(self, r: np.ndarray) -> np.ndarray:
+        return self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r * r)
 
 
 class SphericalGaussian(Potential):
@@ -92,7 +104,9 @@ class SphericalGaussian(Potential):
         self.inv_sigma_sq = 1./(sigma**2)
 
     def compute(self, pos: np.ndarray, f: np.ndarray) -> np.ndarray:
-        r_sq = (pos ** 2).sum(axis=1)
-        E = self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r_sq)
+        E = self.get_potential(np.linalg.norm(pos, axis=1))
         f[:] = (E * self.inv_sigma_sq)[:, None] * pos
         return E
+
+    def get_potential(self, r: np.ndarray) -> np.ndarray:
+        return self.U0 * np.exp(-0.5 * self.inv_sigma_sq * r * r)
