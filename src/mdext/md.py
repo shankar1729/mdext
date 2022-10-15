@@ -1,4 +1,4 @@
-from lammps import lammps, PyLammps, LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR
+from lammps import lammps, PyLammps
 import mdext
 from mdext import MPI, potential
 from .histogram import Histogram
@@ -7,6 +7,7 @@ import os
 import time
 import logging
 import sys
+from typing import Callable
 
 
 log: logging.Logger = logging.getLogger("mdext")  #: Log for the mdext module
@@ -18,7 +19,16 @@ thermo_callback = None  #: imported into __main__ by lammps python command
     
 class MD:
     
-    def __init__(self, *, T: float, seed: int, U0: float, sigma: float) -> None:
+    def __init__(
+        self,
+        *,
+        setup: Callable[[PyLammps, int], None],
+        T: float,
+        seed: int,
+        U0: float,
+        sigma: float,
+        n_thermo: int = 10,
+    ) -> None:
         np.random.seed(seed)
 
         # Set up LAMMPS instance:
@@ -30,45 +40,19 @@ class MD:
         # Global settings:
         lmp.units("real") # kcal/mol, Angstrom
         lmp.dimension("3")
-        lmp.atom_style("full")
         lmp.boundary("p p p")
+        
+        # Set up initial atomic configuration and interaction potential:
+        setup(lmp, seed)
 
-        # Construct simulation box:
-        L = np.array([30., 30., 30.])  # overall box dimensions
-        n_atom_types = 1 
-
-        lmp.region(
-            f"sim_box block -{L[0]/2} {L[0]/2} -{L[1]/2} {L[1]/2} -{L[2]/2} {L[2]/2}"
-            " units box"
-        )
-        lmp.create_box( f"{n_atom_types} sim_box")
-        n_atoms = 900  # roughly the bulk density of water
-        lmp.create_atoms(f"1 random {n_atoms} {seed} sim_box")
-        lmp.mass("1 15.9994")
-
-        # Interaction potential:
-        lmp.pair_style("lj/cut 10")
-        lmp.pair_coeff("1 1 1.0 2.97")  # Adjusted to get water bulk density
-        lmp.pair_modify("tail yes")
-
-        # Initial minimize:
-        log.info("Minimizing initial structure")
-        #lmp.neigh_modify("exclude molecule/intra all")
-        n_thermo = 10
-        lmp.thermo(n_thermo)
-        lmp.thermo_style("custom step temp press pe")
-        lmp.minimize("1E-4 1E-6 10000 100000")
-        # --- reset neighbor and timesteps
+        # Prepare for dynamics:
         lmp.reset_timestep("0")
-        lmp.neighbor("2. bin")
-        lmp.neigh_modify("exclude none every 1 check yes")
         lmp.timestep("2.")  # in femtoseconds
-
-        # Set up for dynamics:
         lmp.velocity(f"all create {T} {seed} dist gaussian loop local")
         #lmp.fix(f"Ensemble all nvt temp {T} {T} 100")  # Td = 100 fs
         lmp.fix(f"Ensemble all npt temp {T} {T} 100 iso 1 1 100")  # Td = 100 fs
-        # --- thermo callback
+        # --- setup thermo callback
+        lmp.thermo(n_thermo)
         mdext.md.thermo_callback = self
         lmp.python(
             "thermo_callback input 1 SELF return v_thermo_callback format pf here"
@@ -76,7 +60,7 @@ class MD:
         )
         lmp.variable("thermo_callback python thermo_callback")
         lmp.thermo_style("custom step temp press pe vol v_thermo_callback")
-        # --- external fix
+        # --- set up external force callback
         extpot = potential.Planar(U0, sigma)
         lmp.fix("ext all external pf/callback 1 1")
         lps.set_fix_external_callback("ext", extpot, lps)
@@ -95,7 +79,8 @@ class MD:
         self.cycle_stats = np.zeros(4)  # cumulative T, P, PE, vol
         # --- setup histograms:
         self.dz = 0.05
-        self.hist = Histogram(-L[2]/2, L[2]/2, self.dz, 1)  # used in each thermo
+        boxlo, boxhi = lps.extract_box()[:2]
+        self.hist = Histogram(boxlo[2], boxhi[2], self.dz, 1)  # used in each thermo
         self.z = self.hist.bins
         self.cycle_density = np.zeros((len(self.z), self.hist.n_w))  # results within a cycle
         self.density = np.zeros_like(self.cycle_density)  # cumulative results
