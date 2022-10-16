@@ -1,0 +1,4 @@
+#!/bin/bash
+#SBATCH -p cpu -N 1 -n 16 -c 1 --hint=nomultithread -o test-U+3.out -t 30
+
+mpirun python nacl_nn.py

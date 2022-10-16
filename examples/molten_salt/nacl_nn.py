@@ -1,4 +1,4 @@
-"""SPC/E water test at STP."""
+"""Molten NaCl using SimpleNN trained to PBE+D3 at 1300 K."""
 import mdext
 import numpy as np
 from lammps import PyLammps
@@ -8,10 +8,10 @@ from mdext import MPI, log
 def main() -> None:
 
     # Current simulation parameters:
-    T = 298.0  # K
-    P = 1.0  # atm
+    T = 1300.0  # K
+    P = 1.0  # bar
     seed = 12345
-    U0 = -10.   # Amplitude of the external potential (kcal/mol)
+    U0 = +3.   # Amplitude of the external potential (kcal/mol)
     sigma = 1. # Width of the external potential (A)
 
     # Initialize and run simulation:
@@ -24,49 +24,48 @@ def main() -> None:
         geometry_type=mdext.geometry.Planar,
         n_atom_types=2,
         potential_type=2,
+        units="metal",
+        timestep=0.002,
+        Tdamp=0.1,
+        Pdamp=0.1,
     )
-    md.run(5, "equilibration")
+    md.run(2, "equilibration")
     md.reset_stats()
-    md.run(20, "collection", "test.h5")
+    md.run(5, "collection", f"test-U{U0:+.0f}.h5")
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
     """Setup initial atomic configuration and interaction potential."""
     
     # Construct water box:
-    L = np.array([30., 30., 30.])  # overall box dimensions
+    L = [20.] * 3  # box dimensions
     file_liquid = "liquid.data"
     is_head = (MPI.COMM_WORLD.rank == 0)
     if is_head:
-        mdext.make_liquid.make_water(
+        mdext.make_liquid.make_liquid(
             pos_min=[-L[0]/2, -L[1]/2, -L[2]/2],
             pos_max=[+L[0]/2, +L[1]/2, +L[2]/2],
             out_file=file_liquid,
+            N_bulk=0.015,
+            masses=[22.99, 35.45],
+            radii=[1.0, 1.0],
+            atom_types=[1, 2],
+            atom_pos=[[0., 0., 1.3], [0., 0., -1.3]],
+            bond_types=np.zeros((0,), dtype=int),
+            bond_indices=np.zeros((0, 2), dtype=int),
+            angle_types=np.zeros((0,), dtype=int),
+            angle_indices=np.zeros((0, 3), dtype=int),
         )
     lmp.atom_style("full")
     lmp.read_data(file_liquid)
 
-    # Interaction potential (SPC/E, long-range):
-    lmp.pair_style("lj/long/coul/long long long 10")
-    lmp.bond_style("harmonic")
-    lmp.angle_style("harmonic")
-    lmp.kspace_style("pppm/disp 1e-5")
-    lmp.kspace_modify("mesh/disp 5 5 5 gewald/disp 0.24")
-    lmp.set("type 1 charge  0.4238")
-    lmp.set("type 2 charge -0.8476")
-    lmp.pair_coeff("1 *2 0.000 0.000")  # No LJ for H
-    lmp.pair_coeff("2 2 0.1553 3.166")  # O-O
-    lmp.bond_coeff("1 1000 1.0")  # H-O
-    lmp.angle_coeff("1 100 109.47")  # H-O-H
+    # Interaction potential (SimpleNN):
+    lmp.pair_style("nn")
+    lmp.pair_coeff("* * potential_snn Na Cl")
 
     # Initial minimize:
     log.info("Minimizing initial structure")
-    lmp.neigh_modify("exclude molecule/intra all")
     lmp.minimize("1E-4 1E-6 10000 100000")
-    
-    # Rigid molecule constraints for dynamics:
-    lmp.neigh_modify("exclude none")
-    lmp.fix("BondConstraints all shake 0.001 20 0 b 1 a 1")
 
 
 if __name__ == "__main__":

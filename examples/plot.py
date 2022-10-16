@@ -10,7 +10,7 @@ if len(sys.argv) < 2:
 filename = sys.argv[1]
 n_bulk = float(sys.argv[2]) if (len(sys.argv) > 2) else None
 
-with h5py.File("test.h5", "r") as fp:
+with h5py.File(filename, "r") as fp:
     r = np.array(fp["r"])
     n = np.array(fp["n"])
     V = np.array(fp["V"])

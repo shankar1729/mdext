@@ -208,8 +208,8 @@ def make_liquid(
     with open(out_file, "w") as fp:
         fp.write("Random liquid created from single molecule by make_liquid\n")
         fp.write(f"{atom_types_all.max():4d} atom types\n")
-        fp.write(f"{bond_types_all.max():4d} bond types\n")
-        fp.write(f"{angle_types_all.max():4d} angle types\n")
+        fp.write(f"{bond_types_all.max(initial=0):4d} bond types\n")
+        fp.write(f"{angle_types_all.max(initial=0):4d} angle types\n")
         fp.write(f"{n_atoms:4d} atoms\n")
         fp.write(f"{n_bonds:4d} bonds\n")
         fp.write(f"{n_angles:4d} angles\n")
@@ -226,17 +226,19 @@ def make_liquid(
         ):
             fp.write(f"{i_atom + 1} {molecule_id} {atom_type} 0 {x} {y} {z}\n")
 
-        fp.write("\nBonds\n\n")
-        for i_bond, (bond_type, (at1, at2)) in enumerate(
-            zip(bond_types_all, bond_indices_all)
-        ):
-            fp.write(f"{i_bond + 1} {bond_type} {at1} {at2}\n")
-
-        fp.write("\nAngles\n\n")
-        for i_angle, (angle_type, (at1, at2, at3)) in enumerate(
-            zip(angle_types_all, angle_indices_all)
-        ):
-            fp.write(f"{i_angle + 1} {angle_type} {at1} {at2} {at3}\n")
+        if bond_types_all:
+            fp.write("\nBonds\n\n")
+            for i_bond, (bond_type, (at1, at2)) in enumerate(
+                zip(bond_types_all, bond_indices_all)
+            ):
+                fp.write(f"{i_bond + 1} {bond_type} {at1} {at2}\n")
+        
+        if angle_types_all:
+            fp.write("\nAngles\n\n")
+            for i_angle, (angle_type, (at1, at2, at3)) in enumerate(
+                zip(angle_types_all, angle_indices_all)
+            ):
+                fp.write(f"{i_angle + 1} {angle_type} {at1} {at2} {at3}\n")
 
 
 if __name__ == "__main__":
