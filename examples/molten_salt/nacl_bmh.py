@@ -1,5 +1,5 @@
 
-"""Molten NaCl using SimpleNN trained to PBE+D3 at 1300 K."""
+"""Molten NaCl using Fumi-Tosi potential at 1300 K."""
 import mdext
 import numpy as np
 from lammps import PyLammps
