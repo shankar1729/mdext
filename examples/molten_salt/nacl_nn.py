@@ -11,7 +11,7 @@ def main() -> None:
     T = 1300.0  # K
     P = 1.0  # bar
     seed = 12345
-    U0 = +3.   # Amplitude of the external potential (kcal/mol)
+    U0 = -0.50  # Amplitude of the external potential (eV)
     sigma = 1. # Width of the external potential (A)
 
     # Initialize and run simulation:
@@ -31,7 +31,7 @@ def main() -> None:
     )
     md.run(2, "equilibration")
     md.reset_stats()
-    md.run(5, "collection", f"test-U{U0:+.0f}.h5")
+    md.run(5, "collection", f"test-U{U0:+.1f}.h5")
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
