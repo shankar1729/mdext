@@ -1,4 +1,0 @@
-#!/bin/bash
-#SBATCH  -n 16 -c 1 -t 48:00:00 --hint=nomultithread -o LOG
-mpirun python md_molten_nacl-expr.py -A $1 -s $2 -T $3 -type $4 -geom $5
-#mpirun python md_molten_nacl-expr.py -A 0.5 -s 5.0 -T 1700 -type rep -geom p
