@@ -16,11 +16,11 @@ with h5py.File(filename, "r") as fp:
     V = np.array(fp["V"])
 
 fig, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 8))
-axes[0].plot(r, n, rasterize=True)
+axes[0].plot(r, n, rasterized=True)
 if n_bulk is not None:
     axes[0].axhline(n_bulk, color='k', ls='dotted')
 axes[0].set_ylabel("Density")
-axes[1].plot(r, V)
+axes[1].plot(r, V, rasterized=True)
 axes[1].set_ylabel("Potential")
 axes[1].set_xlabel("r")
 plt.savefig(filename[:-3]+".svg")
