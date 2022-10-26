@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH  -n 16 -c 1 -t 48:00:00 --hint=nomultithread -o LOG
+#SBATCH  -n 16 -c 1 -t 48:00:00 --hint=nomultithread -o out_&j
 
-mpirun python nacl_bmh.py \
-	-U -0.2 \
-	-s 1. \
-	-T 1300. \
-	-P 1. \
-	-p 1  \
-	-g planar \
-	-o test-U-0.20.h5
+mpirun python ../nacl_bmh.py \
+	-U $1 \
+	-s $2 \
+	-T $3 \
+	-P $4 \
+	-p $5 \
+	-g $6 \
+	-o $7
