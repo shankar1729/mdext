@@ -4,27 +4,62 @@ import mdext
 import numpy as np
 from lammps import PyLammps
 from mdext import MPI, log
+import argparse
 
 
 def main() -> None:
 
-    # Current simulation parameters:
-    T = 1300.0  # K
-    P = 1.0  # bar
-    seed = 12345
-    U0 = +0.20  # Amplitude of the external potential (eV)
-    sigma = 1. # Width of the external potential (A)
+    # Get simulation parameters from the command line:
+    parser = argparse.ArgumentParser(description="Molten NaCl in external potentials")
+    parser.add_argument(
+        '-U', '--U0', type=float, required=True,
+        help="amplitude of Gaussian external potential in eV"
+    )
+    parser.add_argument(
+        '-s', '--sigma', type=float, required=True,
+        help="width of Gaussian external potential in Ansgtroms",
+    )
+    parser.add_argument(
+        '-S', '--seed', type=int, default=12345,
+        help="random number seed",
+    )
+    parser.add_argument(
+        '-T', '--temperature', type=float, required=True,
+        help="temperature in Kelvin",
+    )
+    parser.add_argument(
+        '-P', '--pressure', type=float, required=True,
+        help="pressure in bars",
+    )
+    parser.add_argument(
+        '-o', '--output_file', type=str, required=True,
+        help="HDF5 output filename",
+    )
+    parser.add_argument(
+        '-p', '--potential_type', type=int, required=True,
+        help="atom type to apply the potential to (1-based)"
+    )
+    geometry_map = {
+        'spherical': mdext.geometry.Spherical,
+        'cylindrical': mdext.geometry.Cylindrical,
+        'planar': mdext.geometry.Planar,
+    }
+    parser.add_argument(
+        '-g', '--geometry', choices=geometry_map.keys(), required=True,
+        help="1D symmetry of external potential",
+    )
+    args = parser.parse_args()
 
     # Initialize and run simulation:
     md = mdext.md.MD(
         setup=setup,
-        T=T,
-        P=P,
-        seed=seed,
-        potential=mdext.potential.Gaussian(U0, sigma),
-        geometry_type=mdext.geometry.Planar,
+        T=args.temperature,
+        P=args.pressure,
+        seed=args.seed,
+        potential=mdext.potential.Gaussian(args.U0, args.sigma),
+        geometry_type=geometry_map[args.geometry],
         n_atom_types=2,
-        potential_type=2,
+        potential_type=args.potential_type,
         units="metal",
         timestep=0.002,
         Tdamp=0.1,
@@ -32,7 +67,7 @@ def main() -> None:
     )
     md.run(2, "equilibration")
     md.reset_stats()
-    md.run(5, "collection", f"test-U{U0:+.2f}.h5")
+    md.run(5, "collection", args.output_file)
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
@@ -65,7 +100,9 @@ def setup(lmp: PyLammps, seed: int) -> int:
     lmp.pair_coeff("1 1 0.2637 0.317 2.340 1.048553 -0.49935") # Na-Na
     lmp.pair_coeff("2 2 0.158221 0.327 3.170 75.0544 -150.7325")  # Cl-Cl
     lmp.pair_coeff("1 2 0.21096 0.317 2.755 6.99055303 -8.6757")  # Na-Cl
-    lmp.kspace_style("ewald 1e-5")
+    lmp.set("type 1 charge +1")
+    lmp.set("type 2 charge -1")
+    lmp.kspace_style("pppm 1e-5")
 
     # Initial minimize:
     log.info("Minimizing initial structure")
