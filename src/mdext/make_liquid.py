@@ -226,14 +226,14 @@ def make_liquid(
         ):
             fp.write(f"{i_atom + 1} {molecule_id} {atom_type} 0 {x} {y} {z}\n")
 
-        if bond_types_all:
+        if n_bonds:
             fp.write("\nBonds\n\n")
             for i_bond, (bond_type, (at1, at2)) in enumerate(
                 zip(bond_types_all, bond_indices_all)
             ):
                 fp.write(f"{i_bond + 1} {bond_type} {at1} {at2}\n")
         
-        if angle_types_all:
+        if n_angles:
             fp.write("\nAngles\n\n")
             for i_angle, (angle_type, (at1, at2, at3)) in enumerate(
                 zip(angle_types_all, angle_indices_all)

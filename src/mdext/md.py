@@ -120,7 +120,8 @@ class MD:
         os.environ["OMP_NUM_THREADS"] = "1"  # run single-threaded
         lps = lammps()
         lmp = PyLammps(ptr=lps)
-        self.lmp = lmp
+        self.lps = lps  #: Raw LAMMPS interface
+        self.lmp = lmp  #: PyLAMMPS interface
         self.t_start = time.time()
 
         # Global settings:
@@ -217,7 +218,7 @@ class MD:
                 self.save_response(out_filename)
         log.info(f"Completed {run_name}")
 
-    def __call__(self, lmp_ptr) -> float:
+    def __call__(self, unused_lmp_ptr) -> float:
         """Callback function invoked during each thermo cycle to collect densities."""
         if self.i_thermo == -1:
             # Ignore first step redundant with previous cycle:
@@ -225,12 +226,11 @@ class MD:
             return 0.
         
         # Collect results over cycle:
-        lps = lammps(ptr=lmp_ptr)
-        self.cycle_stats += np.array((
-            lps.get_thermo("temp"),
-            lps.get_thermo("press"),
-            lps.get_thermo("pe"),
-            lps.get_thermo("vol"),
+        self.cycle_stats += np.stack((
+            self.lps.get_thermo("temp"),
+            self.lps.get_thermo("press"),
+            self.lps.get_thermo("pe"),
+            self.lps.get_thermo("vol"),
         ))
         self.i_thermo += 1
 
