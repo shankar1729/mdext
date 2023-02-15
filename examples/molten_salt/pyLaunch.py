@@ -14,7 +14,7 @@ P = 1. # pressue
 p = 1 # atom type to apply the potential to (1-based)
 g = 'planar'
 
-endRange = 0.2
+endRange = 0.5
 stepSize = 0.1
 
 # Ui=-0.4

@@ -78,7 +78,7 @@ def setup(lmp: PyLammps, seed: int) -> int:
     # Initial minimize:
     log.info("Minimizing initial structure")
     lmp.minimize("1E-4 1E-6 10000 100000")
-
+    
 
 if __name__ == "__main__":
     main()

@@ -17,7 +17,7 @@ def main() -> None:
     )
     parser.add_argument(
         '-s', '--sigma', type=float, required=True,
-        help="width of Gaussian external potential in Ansgtroms",
+        help="width of Gaussian external potential in Angstroms",
     )
     parser.add_argument(
         '-S', '--seed', type=int, default=12345,
@@ -67,6 +67,7 @@ def main() -> None:
     )
     md.run(2, "equilibration")
     md.reset_stats()
+    
     md.run(5, "collection", args.output_file)
 
 
@@ -103,6 +104,9 @@ def setup(lmp: PyLammps, seed: int) -> int:
     lmp.set("type 1 charge +1")
     lmp.set("type 2 charge -1")
     lmp.kspace_style("pppm 1e-5")
+
+    # Store Dump files for training
+    
 
     # Initial minimize:
     log.info("Minimizing initial structure")
