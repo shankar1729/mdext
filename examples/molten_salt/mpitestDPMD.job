@@ -1,0 +1,27 @@
+#!/bin/bash
+#SBATCH -A m4025
+#SBATCH -C cpu
+#SBATCH -t 5:00
+# #SBATCH -t 6:00:00
+#SBATCH -N 1
+#SBATCH -o nntrain.o%j
+#SBATCH -n 16
+#SBATCH -q regular
+
+# 2x128/-n
+
+#module load python
+#conda activate SNN
+
+module use /global/common/software/m3169/perlmutter/modulefiles
+module load openmpi
+
+##SBATCH -p cpu -N 1 -n 16 -c 1 --hint=nomultithread -o test-U+3.out -t 30
+
+# was mpirun
+# mpirun -np 4 
+mpirun -np 4 python nacl_DPMD.py
+
+echo 'DONE RUNNING!!'
+
+
