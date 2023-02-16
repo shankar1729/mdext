@@ -14,11 +14,14 @@ from mdext import MPI, log
 
 def main() -> None:
 
+
+    
     # Current simulation parameters:
     T = 1300.0  # K
     P = 1.0  # bar
     seed = 12345
-    U0 = +0.20  # Amplitude of the external potential (eV)
+    U0 = -1.5  # Amplitude of the external potential (eV)
+    # U0 = +0.20  # Amplitude of the external potential (eV)
     sigma = 1. # Width of the external potential (A)
 
     # Initialize and run simulation:
@@ -36,9 +39,11 @@ def main() -> None:
         Tdamp=0.1,
         Pdamp=0.1,
     )
+    
     md.run(2, "equilibration") # 10 for final
     md.reset_stats()
     md.run(5, "collection", f"test-U{U0:+.2f}.h5") # 100 for final
+
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
@@ -75,10 +80,13 @@ def setup(lmp: PyLammps, seed: int) -> int:
     lmp.pair_coeff("1 2 0.21096 0.317 2.755 6.99055303 -8.6757")  # Na-Cl
     lmp.kspace_style("ewald 1e-5")
 
+
+    
     # Initial minimize:
     log.info("Minimizing initial structure")
     lmp.minimize("1E-4 1E-6 10000 100000")
-    
+    # no dump if resetting stats for plotting
+    # lmp.dump("write all custom 100 pylammps.dump id type x y z vx vy vz")
 
 if __name__ == "__main__":
     main()

@@ -144,10 +144,16 @@ class MD:
         if P is None:
             lmp.fix(f"Ensemble all nvt temp {T} {T} {Tdamp}")
         else:
-            # planar geometry apply pressure in Z only
-            # cylidrical geometry apply pressure in X Y 
-            # spherical (done)
-            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} iso {P} {P} {Pdamp}")
+
+            # planar geometry fix x y dimensions
+            if geometry_type == mdext.geometry.Planar:
+                lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} z {P} {P} {Pdamp}")
+            # cylidrical geometry fix z dimension
+            if geometry_type == mdext.geometry.Cylindrical:
+                lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} x {P} {P} {Pdamp} y {P} {P} {Pdamp}")
+            # spherical fix no dimensions
+            if geometry_type == mdext.geometry.Spherical:
+                lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} iso {P} {P} {Pdamp}")
 
         # Setup thermo callback
         lmp.thermo(steps_per_thermo)
