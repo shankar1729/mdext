@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH -A m4025
+#SBATCH -C cpu
+# #SBATCH -t 6:00:00
+#SBATCH -t 2:00:00
+#SBATCH -N 1
+#SBATCH -o variable.o%j
+#SBATCH -n 1
+#SBATCH -q regular
+
+module load python
+conda activate pylammps9
+
+python nacl_DPMD2.py

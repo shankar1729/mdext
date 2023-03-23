@@ -6,12 +6,15 @@ import sys
 if len(sys.argv) < 2:
     print("Usage: python plot.py <file1.h5> [<n_bulk>]")
     exit(1)
+    
+# add rejection of initial data
 
 filename = sys.argv[1]
 n_bulk = float(sys.argv[2]) if (len(sys.argv) > 2) else None
 
 with h5py.File(filename, "r") as fp:
     r = np.array(fp["r"])
+    # n = np.array(fp["n"])/n_bulk
     n = np.array(fp["n"])
     V = np.array(fp["V"])
 

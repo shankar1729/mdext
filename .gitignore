@@ -133,4 +133,7 @@ log.lammps
 *.h5
 *.out
 liquid.data
+*.pb
+*.dump
+*.pdf
 
