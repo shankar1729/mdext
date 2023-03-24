@@ -30,8 +30,9 @@ for pot in pots:
     
 
     for Ui in np.around(np.arange(0,endRange*2 + stepSize ,stepSize), decimals=1)-endRange:  
-        print(f"{Ui:.1f}")
-        o = f"NaCl_U{Ui:.1f}.h5"
+        print(f"{Ui:+.1f}")
+        o = f"test-U{Ui:+.1f}.h"
+        # f"NaCl_U{Ui:+.1f}.h5"
         log = o[:-3]+"_out"
 
         # orig deepmd

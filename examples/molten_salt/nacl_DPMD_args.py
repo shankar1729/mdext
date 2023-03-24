@@ -72,10 +72,10 @@ def main() -> None:
         Tdamp=0.1,
         Pdamp=0.1,
     )
-    md.run(1, "equilibration")
-    # md.run(2, "equilibration")
-    # md.reset_stats()
-    # md.run(5, "collection", f"test-U{U0:+.1f}.h5")
+    # md.run(1, "equilibration")
+    md.run(2, "equilibration")
+    md.reset_stats()
+    md.run(5, "collection", args.output_file)
 
 
 def setup(lmp: PyLammps, seed: int) -> int:
