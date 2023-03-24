@@ -4,7 +4,7 @@
 
 
 mpirun python ../nacl_bmh.py \
-	-U -0.2 \
+	-U 1.0 \
 	-s 1. \
 	-T 1300. \
 	-P 1. \

@@ -10,7 +10,7 @@ import numpy as np
 
 s = 1. # sigma width gaussian
 T = 1300. # kelvin
-P = 1. # pressue
+P = 1. # pressue  XXXX overridden later to be none TODO clean up
 p = 2 # atom type to apply the potential to (1-based)
 g = 'planar'
 
@@ -32,7 +32,6 @@ for pot in pots:
     for Ui in np.around(np.arange(0,endRange*2 + stepSize ,stepSize), decimals=1)-endRange:  
         print(f"{Ui:+.1f}")
         o = f"test-U{Ui:+.1f}.h"
-        # f"NaCl_U{Ui:+.1f}.h5"
         log = o[:-3]+"_out"
 
         # orig deepmd

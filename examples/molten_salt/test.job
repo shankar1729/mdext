@@ -1,8 +1,0 @@
-#!/bin/bash
-#SBATCH -p cpu -N 1 -n 16 -c 1 --hint=nomultithread -o test-U-0.5.out -t 30
-
-module purge
-#module load venv/mdext
-module load venv/mdextKF
-
-mpirun python ../nacl_bmh_simple.py

@@ -1,0 +1,12 @@
+#!/bin/bash
+# #SBATCH -p cpu -N 1 -n 16 -c 1 --hint=nomultithread -o test.out -t 30
+#SBATCH -p cpu -N 1 -n 16 -c 1 --hint=nomultithread -o test.out -t 2:00:00
+
+module purge
+#module load venv/mdext
+module load venv/mdextKF
+module load openmpi
+module load pylammps
+
+mpirun python ../nacl_bmh_simple.py
+#python ../nacl_bmh_simple.py

@@ -20,7 +20,7 @@ def main() -> None:
     T = 1300.0  # K
     P = 1.0  # bar
     seed = 12345
-    U0 = -1.5  # Amplitude of the external potential (eV)
+    U0 = 1.0  # Amplitude of the external potential (eV)
     # U0 = +0.20  # Amplitude of the external potential (eV)
     sigma = 1. # Width of the external potential (A)
 
@@ -28,7 +28,7 @@ def main() -> None:
     md = mdext.md.MD(
         setup=setup,
         T=T,
-        P=P,
+        P=None,
         seed=seed,
         potential=mdext.potential.Gaussian(U0, sigma),
         geometry_type=mdext.geometry.Planar,
@@ -54,12 +54,13 @@ def setup(lmp: PyLammps, seed: int) -> int:
     file_liquid = "liquid.data"
     is_head = (MPI.COMM_WORLD.rank == 0)
     if is_head:
+        # Cl1 Na2
         mdext.make_liquid.make_liquid(
             pos_min=[-L[0]/2, -L[1]/2, -L[2]/2],
             pos_max=[+L[0]/2, +L[1]/2, +L[2]/2],
             out_file=file_liquid,
             N_bulk=0.015,
-            masses=[22.99, 35.45],
+            masses=[35.45, 22.99],
             radii=[1.0, 1.0],
             atom_types=[1, 2],
             atom_pos=[[0., 0., 1.3], [0., 0., -1.3]],
@@ -72,11 +73,11 @@ def setup(lmp: PyLammps, seed: int) -> int:
     lmp.read_data(file_liquid)
 
     # Interaction potential (Fumi-Tosi w/ Ewald summation):
-    lmp.set(f"type 1 charge +1")
-    lmp.set(f"type 2 charge -1")
+    lmp.set(f"type 1 charge -1")
+    lmp.set(f"type 2 charge +1")
     lmp.pair_style("born/coul/long 9.0")
-    lmp.pair_coeff("1 1 0.2637 0.317 2.340 1.048553 -0.49935") # Na-Na
-    lmp.pair_coeff("2 2 0.158221 0.327 3.170 75.0544 -150.7325")  # Cl-Cl
+    lmp.pair_coeff("1 1 0.158221 0.327 3.170 75.0544 -150.7325")  # Cl-Cl
+    lmp.pair_coeff("2 2 0.2637 0.317 2.340 1.048553 -0.49935") # Na-Na
     lmp.pair_coeff("1 2 0.21096 0.317 2.755 6.99055303 -8.6757")  # Na-Cl
     lmp.kspace_style("ewald 1e-5")
 

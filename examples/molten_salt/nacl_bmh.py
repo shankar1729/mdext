@@ -54,7 +54,8 @@ def main() -> None:
     md = mdext.md.MD(
         setup=setup,
         T=args.temperature,
-        P=args.pressure,
+        # P=args.pressure,
+        P=None,
         seed=args.seed,
         potential=mdext.potential.Gaussian(args.U0, args.sigma),
         geometry_type=geometry_map[args.geometry],
@@ -67,7 +68,6 @@ def main() -> None:
     )
     md.run(2, "equilibration")
     md.reset_stats()
-    
     md.run(5, "collection", args.output_file)
 
 
@@ -79,12 +79,13 @@ def setup(lmp: PyLammps, seed: int) -> int:
     file_liquid = "liquid.data"
     is_head = (MPI.COMM_WORLD.rank == 0)
     if is_head:
+        # needs to be Cl1 Na2 for consistency
         mdext.make_liquid.make_liquid(
             pos_min=[-L[0]/2, -L[1]/2, -L[2]/2],
             pos_max=[+L[0]/2, +L[1]/2, +L[2]/2],
             out_file=file_liquid,
             N_bulk=0.015,
-            masses=[22.99, 35.45],
+            masses=[35.45, 22.99],
             radii=[1.0, 1.0],
             atom_types=[1, 2],
             atom_pos=[[0., 0., 1.3], [0., 0., -1.3]],
@@ -98,11 +99,12 @@ def setup(lmp: PyLammps, seed: int) -> int:
 
     # Interaction potential (Fumi-Tosi w/ Ewald summation):
     lmp.pair_style("born/coul/long 9.0")
-    lmp.pair_coeff("1 1 0.2637 0.317 2.340 1.048553 -0.49935") # Na-Na
-    lmp.pair_coeff("2 2 0.158221 0.327 3.170 75.0544 -150.7325")  # Cl-Cl
+    
+    lmp.pair_coeff("1 1 0.158221 0.327 3.170 75.0544 -150.7325")  # Cl-Cl
+    lmp.pair_coeff("2 2 0.2637 0.317 2.340 1.048553 -0.49935") # Na-Na
     lmp.pair_coeff("1 2 0.21096 0.317 2.755 6.99055303 -8.6757")  # Na-Cl
-    lmp.set("type 1 charge +1")
-    lmp.set("type 2 charge -1")
+    lmp.set("type 1 charge -1")
+    lmp.set("type 2 charge +1")
     lmp.kspace_style("pppm 1e-5")
 
     # Store Dump files for training
