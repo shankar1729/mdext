@@ -10,7 +10,7 @@ import mdext
 import numpy as np
 from lammps import PyLammps
 from mdext import MPI, log
-
+from dataclasses import dataclass
 
 def main() -> None:
 
@@ -23,7 +23,7 @@ def main() -> None:
     U0 = 1.0  # Amplitude of the external potential (eV)
     # U0 = +0.20  # Amplitude of the external potential (eV)
     sigma = 1. # Width of the external potential (A)
-
+    setup = Setup(startfile)
     # Initialize and run simulation:
     md = mdext.md.MD(
         setup=setup,
@@ -45,13 +45,22 @@ def main() -> None:
     # md.run(5, "collection", f"test-U{U0:+.2f}.h5") # 100 for final
     md.lmp.write_data("test.data")
 
-
-    def setup(lmp: PyLammps, seed: int) -> int:
+@dataclass
+class Setup:
+    startfile: str
+    R: float = 0.0
+    
+    # replaces 
+    # def __init__(self, startfile):
+    #     self.startfile = startfile
+        
+    def __call__(self, lmp: PyLammps, seed: int) -> int:
         """Setup initial atomic configuration and interaction potential."""
 
         # Construct water box:
         L = [20.] * 3  # box dimensions
-        file_liquid = "liquid.data"
+        file_liquid = self.startfile # "liquid.data"
+        
         is_head = (MPI.COMM_WORLD.rank == 0)
         if is_head:
             # Cl1 Na2

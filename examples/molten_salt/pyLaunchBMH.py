@@ -28,8 +28,8 @@ for Ui in np.around(np.arange(0,endRange*2 + stepSize ,stepSize), decimals=1)-en
     o = f"test-U{Ui:+.1f}.h"
     log = o[:-3]+"_out"
 
-
-    os.system(f"bash ../nacl_bmh.job {Ui} {s} {T} {P} {p} {g} {o}")  #  > {log} &
+    os.system(f"sbatch ../nacl_bmh.job {Ui} {s} {T} {P} {p} {g} {o}")
+    # os.system(f"bash ../nacl_bmh.job {Ui} {s} {T} {P} {p} {g} {o} > {log} &")  
     # break
    
 
