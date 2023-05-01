@@ -48,3 +48,18 @@ plt.colorbar(sm, label=r"Perturbation strength, $\lambda$")
 figure = plt.gcf()
 # figure.set_size_inches(3.35, 2.2)
 plt.savefig('plotMany.pdf', dpi=600, bbox_inches='tight')
+
+
+# TODO implement this:
+# from matplotlib.colors import LinearSegmentedColormap
+
+# colorDict = {
+# 	'red':   ((0.0, 1.0, 1.0), (0.5, 0.6, 0.6), (1.0, 0.0, 0.0)),
+# 	'green': ((0.0, 0.0, 0.0), (0.5, 0.6, 0.6), (1.0, 0.3, 0.3)),
+# 	'blue':  ((0.0, 0.0, 0.0), (0.5, 0.6, 0.6), (1.0, 1.0, 1.0))
+# }
+# cmap = LinearSegmentedColormap('RedBlue', colorDict)
+
+# # you can then use cmap=cmap kwarg in any plot call
+
+#TODO add multi plots arranged like this:
