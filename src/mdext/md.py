@@ -59,6 +59,7 @@ class MD:
         geometry_type: GeometryType,
         n_atom_types: int,
         potential_type: int,
+        pe_collect_interval: int = 0,
         units: str = "real",
         timestep: float = 2.0,
         steps_per_thermo: int = 50,
@@ -95,6 +96,10 @@ class MD:
             Number of atom types in the LAMMPS simulation.
         potential_type
             1-based LAMMPS atom type that the external potential should be applied to.
+            If zero, apply same potential to all the atoms.
+        pe_collect_interval
+            If non-zero, collect PE and miinimum particle distance for cavitation
+            analysis. Typically used only with repulsive spherical potentials.
         units
             Supported LAMMPS units system (see `unit_names`).
         timestep
@@ -144,13 +149,7 @@ class MD:
         if P is None:
             lmp.fix(f"Ensemble all nvt temp {T} {T} {Tdamp}")
         else:
-            npt_dims = {
-                mdext.geometry.Planar: ["z"],
-                mdext.geometry.Cylindrical: ["x", "y"],
-                mdext.geometry.Spherical: ["iso"],
-            }
-            npt_opts = [f"{dim} {P} {P} {Pdamp}" for dim in npt_dims[geometry_type]]
-            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} {' '.join(npt_opts)}")
+            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} iso {P} {P} {Pdamp}")
 
         # Setup thermo callback
         lmp.thermo(steps_per_thermo)
@@ -178,6 +177,7 @@ class MD:
             dr=dr,
             n_atom_types=n_atom_types,
             potential_type=potential_type,
+            pe_collect_interval=pe_collect_interval,
         )
         lmp.fix("ext all external pf/callback 1 1")
         lps.set_fix_external_callback("ext", self.force_callback, lps)
@@ -202,6 +202,7 @@ class MD:
         self.i_cycle = 0
         self.cum_density.fill(0.)
         self.force_callback.reset_stats()
+        self.force_callback.reset_history()
 
     def run(self, n_cycles: int, run_name: str, out_filename: str = "") -> None:
         """
@@ -266,3 +267,4 @@ class MD:
                 if self.P is not None:
                     fp.attrs["P"] = self.P
                 fp.attrs["geometry"] = self.force_callback.geometry_type.__name__
+                self.force_callback.save(fp)

@@ -4,6 +4,8 @@ from mdext import MPI
 from .geometry import GeometryType
 from .histogram import Histogram
 from typing import Callable, Tuple
+from dataclasses import dataclass
+import h5py
 
 
 Potential = Callable[[np.ndarray], Tuple[np.ndarray, np.ndarray]]
@@ -24,6 +26,19 @@ class Gaussian:
         return E, r_sq_grad
 
 
+@dataclass
+class Exponential:
+    """Exponential potential"""
+    A: float  #: Strength
+    rho: float  #: Decay length
+    sigma: float  #: Distance where potential is `A`
+
+    def __call__(self, r_sq: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        E = self.A * np.exp((self.sigma - np.sqrt(r_sq)) / self.rho)
+        r_sq_grad = -0.5 * E / (np.sqrt(r_sq) * self.rho)
+        return E, r_sq_grad
+
+
 class ForceCallback:
     """Force callback object to apply external forces and collect densities."""
 
@@ -36,11 +51,12 @@ class ForceCallback:
         dr: float,
         n_atom_types: int,
         potential_type: int,
+        pe_collect_interval: int,
     ):
         self.potential = potential
         self.geometry_type = geometry_type
         self.potential_type = potential_type
-        assert 1 <= potential_type <= n_atom_types
+        assert 0 <= potential_type <= n_atom_types
     
         # Initialize density collection with same 1D geometry as applied potential
         boxlo, boxhi = lps.extract_box()[:2]
@@ -55,10 +71,27 @@ class ForceCallback:
         w_intervals[1 : -1] = volumes[1:] - volumes[:-1]
         self.w_bins = dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
         self.n_steps = 0
+        
+        # Initialize cavitation collection:
+        self.pe_collect_interval = pe_collect_interval
+        self.i_call = 0
+        self.pe_history = []
+        self.r_min_history = []
 
     def reset_stats(self) -> None:
         self.hist.reset()
         self.n_steps = 0
+
+    def reset_history(self) -> None:
+        self.i_call = 0
+        self.pe_history.clear()
+        self.r_min_history.clear()
+
+    def save(self, fp: h5py.File) -> None:
+        if self.pe_history:
+            fp["pe_history"] = np.array(self.pe_history)
+        if self.r_min_history:
+            fp["r_min_history"] = np.array(self.r_min_history)
 
     @property
     def density(self) -> np.ndarray:
@@ -70,7 +103,10 @@ class ForceCallback:
     def get_potential(self) -> np.ndarray:
         """Get the potential on the histogram grid."""
         V = np.zeros_like(self.hist.hist)
-        V[:, self.potential_type - 1]  = self.potential(self.r ** 2)[0]
+        if self.potential_type:
+            V[:, self.potential_type - 1]  = self.potential(self.r ** 2)[0]
+        else:
+            V[:, :]  = self.potential(self.r ** 2)[0][:, None]
         return V
 
     def __call__(
@@ -95,14 +131,15 @@ class ForceCallback:
         
         # Identify atoms to apply external potential / force to:
         types = lps.numpy.extract_atom("type")
-        mask = np.where(types == self.potential_type, 1.0, 0.0)
 
         # Get energies and forces (from derived class):
         f.fill(0.)
         r_sq = self.geometry_type.r_sq(pos)
         E, r_sq_grad = self.potential(r_sq)
-        E *= mask
-        r_sq_grad *= mask
+        if self.potential_type:
+            mask = np.where(types == self.potential_type, 1.0, 0.0)
+            E *= mask
+            r_sq_grad *= mask
         self.geometry_type.set_force(pos, r_sq_grad, f)
         
         # Compute total energy and virial:
@@ -127,3 +164,14 @@ class ForceCallback:
             weights[(types == i_type + 1), i_type] = inv_perpendicular_volume
         self.hist.add_events(np.sqrt(r_sq), weights)
         self.n_steps += 1
+        
+        # Cavitation collection:        
+        if self.pe_collect_interval:
+            if self.i_call % self.pe_collect_interval == 0:
+                r = np.sqrt(r_sq)
+                if self.potential_type:
+                    r[types != self.potential_type] = np.inf
+                r_min = MPI.COMM_WORLD.allreduce(np.min(r), op=MPI.MIN)
+                self.r_min_history.append(r_min)
+                self.pe_history.append(Etot)
+            self.i_call += 1
