@@ -149,7 +149,13 @@ class MD:
         if P is None:
             lmp.fix(f"Ensemble all nvt temp {T} {T} {Tdamp}")
         else:
-            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} iso {P} {P} {Pdamp}")
+            npt_dims = {
+                mdext.geometry.Planar: ["z"],
+                mdext.geometry.Cylindrical: ["x", "y"],
+                mdext.geometry.Spherical: ["iso"],
+            }
+            npt_opts = [f"{dim} {P} {P} {Pdamp}" for dim in npt_dims[geometry_type]]
+            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} {' '.join(npt_opts)}")
 
         # Setup thermo callback
         lmp.thermo(steps_per_thermo)
