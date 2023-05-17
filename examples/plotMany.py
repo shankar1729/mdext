@@ -4,6 +4,7 @@ import h5py
 import sys
 import os
 import matplotlib as mpl
+from matplotlib.colors import LinearSegmentedColormap
 
 endRange = 5.0
 stepSize = 0.5
@@ -15,7 +16,15 @@ N_bulk = 0.015
 plt.figure(1)
 # --- initialize colormap to color by V0
 normalize = mpl.colors.Normalize(vmin=-endRange, vmax=endRange)
-cmap = mpl.cm.get_cmap("RdBu")
+# cmap = mpl.cm.get_cmap("RdBu")
+
+colorDict = {
+	'red':   ((0.0, 1.0, 1.0), (0.5, 0.6, 0.6), (1.0, 0.0, 0.0)),
+	'green': ((0.0, 0.0, 0.0), (0.5, 0.6, 0.6), (1.0, 0.3, 0.3)),
+	'blue':  ((0.0, 0.0, 0.0), (0.5, 0.6, 0.6), (1.0, 1.0, 1.0))
+}
+cmap = LinearSegmentedColormap('RedBlue', colorDict)
+# you can then use cmap=cmap kwarg in any plot call
 
 for Ui in np.around(np.arange(0,endRange*2 + stepSize ,stepSize), decimals=1)-endRange:  
     print(f"{Ui:+.1f}")
@@ -49,17 +58,3 @@ figure = plt.gcf()
 # figure.set_size_inches(3.35, 2.2)
 plt.savefig('plotMany.pdf', dpi=600, bbox_inches='tight')
 
-
-# TODO implement this:
-# from matplotlib.colors import LinearSegmentedColormap
-
-# colorDict = {
-# 	'red':   ((0.0, 1.0, 1.0), (0.5, 0.6, 0.6), (1.0, 0.0, 0.0)),
-# 	'green': ((0.0, 0.0, 0.0), (0.5, 0.6, 0.6), (1.0, 0.3, 0.3)),
-# 	'blue':  ((0.0, 0.0, 0.0), (0.5, 0.6, 0.6), (1.0, 1.0, 1.0))
-# }
-# cmap = LinearSegmentedColormap('RedBlue', colorDict)
-
-# # you can then use cmap=cmap kwarg in any plot call
-
-#TODO add multi plots arranged like this:
