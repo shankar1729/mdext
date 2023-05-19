@@ -78,31 +78,37 @@ plt.figure(figsize=(8,6), dpi=300)
 for i, direct in enumerate(directs):
     r,n = GetData(direct, 5.0)
     plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
-     
+    plt.ylim((0,4))
+    plt.legend()
+    plt.xlabel("z [$\AA$]",fontsize=11,fontname="Times New Roman")
+    plt.ylabel("$n_{Na}(z)/n_{bulk}$",fontsize=11,fontname="Times New Roman")
 
-plt.savefig(fig_name+'attract.pdf')
+plt.savefig(fig_name+'attract.pdf', bbox_inches='tight')
 
-
-
-plt.figure(figsize=(8,6), dpi=300)
-
-for i, direct in enumerate(directs):
-    r,n = GetData(direct, -5.0)
-    plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
-     
-
-plt.savefig(fig_name+'repulse.pdf')
 
 
 plt.figure(figsize=(8,6), dpi=300)
 
 for i, direct in enumerate(directs):
     r,n = GetData(direct, -5.0)
-    plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
-    r,n = GetData(direct, 5.0)
     plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
     plt.ylim((0,4))
-plt.savefig(fig_name+'All.pdf')
+    plt.legend()
+    plt.xlabel("z [$\AA$]",fontsize=11,fontname="Times New Roman")
+    plt.ylabel("$n_{Na}(z)/n_{bulk}$",fontsize=11,fontname="Times New Roman")
+
+plt.savefig(fig_name+'repulse.pdf', bbox_inches='tight', dpi=300)
+
+
+plt.figure(figsize=(8,6), dpi=300)
+
+# for i, direct in enumerate(directs):
+#     r,n = GetData(direct, -5.0)
+#     plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
+#     r,n = GetData(direct, 5.0)
+#     plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
+#     plt.ylim((0,4))
+# plt.savefig(fig_name+'All.pdf')
 
 
 # # %%
