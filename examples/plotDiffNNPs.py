@@ -95,33 +95,33 @@ def main() -> None:
         # Get data
 
         for i, direct in enumerate(directs):
+            plt.sca(ax)
             if ax_ind == 0:
                 #repulsive
                 r,n = GetData(direct, 5.0)
+                plt.ylim((0,2))
             else:
                 #attractive next
                 r,n = GetData(direct, -5.0)
-            plt.sca(ax)
+                plt.ylim((0,4))
+            
             plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
             plt.text(-0.2, 1.01, f"({figLabel[ax_ind]})", ha="left", va="top",
                 transform=ax.transAxes, fontsize="large", fontweight="bold")
+            
+            plt.legend()
+            plt.xlabel("z [$\AA$]")
+            plt.ylabel("$n_{Na}(z)/n_{bulk}$")
 
         # ax.set_title(titles[j])
         ax.grid(True)
         # j-=1
 
-    plt.sca(axs[0])
-    plt.legend()
-    plt.ylabel('test')
-    plt.ylim((0,2))
-    # plt.text(-0.17, 1.01, f"(a)", ha="left", va="top",
-    #     transform=ax.transAxes, fontsize="large", fontweight="bold")
-    # axs[0].set_ylim((0,4))
-    # axs[0].set_ylabel('blah')
-    plt.sca(axs[1])
-    plt.ylabel('blah')
-    plt.ylim((0,4))
-    plt.xlabel('moo')
+    # plt.sca(axs[0])
+    # plt.ylim((0,2))
+
+    # plt.sca(axs[1])
+    # plt.ylim((0,4))
 
     fig.savefig(fig_name+'combo.pdf', bbox_inches='tight')
     
