@@ -82,7 +82,7 @@ def setup(lmp: PyLammps, seed: int) -> int:
     """Setup initial atomic configuration and interaction potential."""
     
     # Construct water box:
-    L = [20.] * 3  # box dimensions
+    L = [40.] * 3  # box dimensions
     file_liquid = "liquid.data"
     is_head = (MPI.COMM_WORLD.rank == 0)
     if is_head:

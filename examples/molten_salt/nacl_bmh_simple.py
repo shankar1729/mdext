@@ -76,9 +76,9 @@ def main() -> None:
         lmp.set(f"type 1 charge -1")
         lmp.set(f"type 2 charge +1")
         lmp.pair_style("born/coul/long 9.0")
-        lmp.pair_coeff("1 1 0.158221 0.327 3.170 75.0544 -150.7325")  # Cl-Cl
-        lmp.pair_coeff("2 2 0.2637 0.317 2.340 1.048553 -0.49935") # Na-Na
-        lmp.pair_coeff("1 2 0.21096 0.317 2.755 6.99055303 -8.6757")  # Na-Cl
+        lmp.pair_coeff("1 1 0.158223509 0.317 3.170 72.40215779 -145.4284714")  # Cl-Cl updated
+        lmp.pair_coeff("2 2 0.263705848 0.317 2.340 1.048583006 -0.49932529") # Na-Na
+        lmp.pair_coeff("1 2 0.210964679 0.317 2.755 6.99055303  -8.675775756")  # Na-Cl
         lmp.kspace_style("ewald 1e-5")
 
 
