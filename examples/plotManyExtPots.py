@@ -56,5 +56,5 @@ sm.set_array([])
 plt.colorbar(sm, label=r"Perturbation strength, $\lambda$")
 figure = plt.gcf()
 # figure.set_size_inches(3.35, 2.2)
-plt.savefig('plotMany.pdf', dpi=600, bbox_inches='tight')
+plt.savefig('NaClplotManyExtPots.pdf', dpi=600, bbox_inches='tight')
 

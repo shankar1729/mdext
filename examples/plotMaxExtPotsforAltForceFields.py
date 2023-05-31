@@ -66,13 +66,15 @@ def main() -> None:
                 #Top - attractive
                 r,n = GetData(direct, -5.0)
                 plt.ylim((0,4))
-                plt.xlabel("z [$\AA$]")    
+                plt.xlabel("z [$\AA$]",fontsize=14)    
 
             plt.plot(r, n[:,particle]/N_bulk, label=labels[i])
             plt.text(-0.2, 1.01, f"({figLabel[ax_ind]})", ha="left", va="top",
                 transform=ax.transAxes, fontsize="large", fontweight="bold")
             
-            plt.ylabel("$n_{Na}(z)/n_{bulk}$")
+            plt.ylabel("$n_{Na}(z)/n_{bulk}$",fontsize=14)
+            plt.xticks(fontsize=14)
+            plt.yticks(fontsize=14)
 
         # ax.set_title(titles[j])
         ax.grid(True)
