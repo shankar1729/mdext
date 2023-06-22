@@ -1,7 +1,7 @@
 from lammps import lammps, PyLammps
 import mdext
 from mdext import MPI
-from .geometry import GeometryType
+from .geometry import GeometryType, Spherical, Cylindrical, Planar
 from .potential import Potential, ForceCallback
 import numpy as np
 import os
@@ -43,6 +43,14 @@ unit_names = {
         'temperature': 'K',
         'pressure': 'Pa',
     },
+    'lj': {
+        'mass': 'm_lj',
+        'distance': 'sigma',
+        'time': 'sigma sqrt(m_lj / epsilon)',
+        'energy': 'epsilon',
+        'temperature': 'epsilon',
+        'pressure': 'epsilon / sigma^3',
+    },
 }  #: unit names (for logging)
 
     
@@ -61,6 +69,7 @@ class MD:
         potential_type: int,
         pe_collect_interval: int = 0,
         units: str = "real",
+        dimension: int = 3,
         timestep: float = 2.0,
         steps_per_thermo: int = 50,
         thermo_per_cycle: int = 100,
@@ -102,6 +111,12 @@ class MD:
             analysis. Typically used only with repulsive spherical potentials.
         units
             Supported LAMMPS units system (see `unit_names`).
+        dimension
+            Set dimensionality of the system, by default 3.
+            The LAMMPS dimension is always set to 3, with the other dimensionalities
+            enforced by fixes. The initial configuration must have all atoms with
+            z = 0 in 2D, and x = y = 0 in 1D. Only Cylindrical geometry is supported
+            for 2D, and only Planar geometry is supported for 1D.
         timestep
             MD timestep in LAMMPS time units.
         steps_per_thermo
@@ -134,8 +149,15 @@ class MD:
         self.units = units
         self.unit_names = unit_names[units]
         lmp.units(units)
-        lmp.dimension("3")
-        lmp.boundary("p p p")
+        
+        # Set up dimensionality and boundary conditions:
+        self.dimension = dimension
+        lmp.dimension("3")  # lammps always in 3D; dimensionalit emulated by fixes.
+        lmp.boundary({1: "f f p", 2: "p p f", 3: "p p p"}[dimension])
+        if dimension == 1:
+            assert geometry_type == Planar
+        if dimension == 2:
+            assert geometry_type == Cylindrical
         
         # Set up initial atomic configuration and interaction potential:
         setup(lmp, seed)
@@ -143,14 +165,33 @@ class MD:
         # Prepare for dynamics:
         lmp.reset_timestep(0)
         lmp.timestep(timestep)  # in femtoseconds
-        lmp.velocity(f"all create {T} {seed} dist gaussian loop local")
         self.T = T
         self.P = P
         if P is None:
             lmp.fix(f"Ensemble all nvt temp {T} {T} {Tdamp}")
         else:
-            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} iso {P} {P} {Pdamp}")
+            Pramp = f"{P} {P} {Pdamp}"
+            npt_mode = {
+                Planar: f"z {Pramp}",
+                Cylindrical: f"x {Pramp} y {Pramp} couple xy",
+                Spherical: f"iso {Pramp}",
+            }[geometry_type]
+            lmp.fix(f"Ensemble all npt temp {T} {T} {Tdamp} {npt_mode}")
 
+            # Fix dof in temperature compute:
+            n_atoms = lmp.system.natoms
+            n_dof = dimension * (n_atoms - 1)
+            extra_dof = 3 * n_atoms - n_dof
+            lmp.compute_modify(f"thermo_temp extra/dof {extra_dof}")
+        lmp.fix_modify("Ensemble temp thermo_temp")
+
+        # Initial velocities and optional constraints for dimensions:
+        lmp.velocity(f"all create {T} {seed} dist gaussian")
+        if dimension < 3:
+            mask = "0.0 0.0 NULL" if (dimension == 1) else "NULL NULL 0.0"
+            lmp.velocity(f"all set {mask}")
+            lmp.fix(f"force_constrain all setforce {mask}")
+        
         # Setup thermo callback
         lmp.thermo(steps_per_thermo)
         mdext.md.thermo_callback = self
@@ -230,9 +271,15 @@ class MD:
             return 0.
         
         # Collect results over cycle:
+        if self.force_callback.geometry_type == Planar:
+            pressure = self.lps.get_thermo("pzz")
+        elif self.force_callback.geometry_type == Cylindrical:
+            pressure = 0.5 * (self.lps.get_thermo("pxx") + self.lps.get_thermo("pyy"))
+        else:
+            pressure = self.lps.get_thermo("press")
         self.cycle_stats += np.stack((
             self.lps.get_thermo("temp"),
-            self.lps.get_thermo("press"),
+            pressure,
             self.lps.get_thermo("pe"),
             self.lps.get_thermo("vol"),
         ))
@@ -246,7 +293,7 @@ class MD:
             self.cum_density += self.force_callback.density
             self.i_cycle += 1
             log.info(
-                f"{self.i_cycle:^5d} {T:7.3f} {P:7.1f} {PE:^12.3f} "
+                f"{self.i_cycle:^5d} {T:7.3f} {P:7.3f} {PE:^12.3f} "
                 f"{vol:^8.1f} {t_cpu:7.1f}"
             )
             # Reset within-cycle quantities:
