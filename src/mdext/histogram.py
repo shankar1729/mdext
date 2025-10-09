@@ -12,11 +12,12 @@ class Histogram:
         channels."""
         self.x_min = x_min
         self.x_max = x_max
+        self.n_intervals = int(np.round((x_max - x_min) / dx))
+        self.dx = (x_max - x_min) / self.n_intervals
         self.dx_inv = 1./dx
         self.n_w = n_w
-        self.bins = np.arange(x_min, x_max, dx)
+        self.bins = np.linspace(x_min, x_max, self.n_intervals + 1)
         self.hist = np.zeros((len(self.bins), n_w))
-        self.n_intervals = len(self.bins) - 1
     
     def add_events(self, x: np.ndarray, w: np.ndarray) -> None:
         """Add contributions from `x` (array of length N)

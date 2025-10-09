@@ -62,14 +62,14 @@ class ForceCallback:
         boxlo, boxhi = lps.extract_box()[:2]
         L = np.array(boxhi) - np.array(boxlo)
         self.hist = Histogram(0.0, geometry_type.r_max(L), dr, n_atom_types)
-        self.dr = dr
+        self.dr = self.hist.dx  # slightly adapted to fit r_max exactly
         self.r = self.hist.bins
 
         # Calculate bin-dependent weight of histograms (eg. 2 pi r for cylindrical):
         volumes = geometry_type.volume(self.r)
         w_intervals = np.zeros(len(self.r) + 1)  # with extra intervals to left & right
         w_intervals[1 : -1] = volumes[1:] - volumes[:-1]
-        self.w_bins = dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
+        self.w_bins = self.dr / (0.5 * (w_intervals[:-1] + w_intervals[1:]))
         self.n_steps = 0
         
         # Initialize cavitation collection:
